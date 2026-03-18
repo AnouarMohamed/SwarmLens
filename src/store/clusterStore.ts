@@ -1,6 +1,19 @@
 import { create } from 'zustand'
 import { api } from '../lib/api'
-import type { SwarmInfo, Node, Stack, Service, Task, Network, Volume, Secret, Config, SwarmEvent } from '../types'
+import type {
+  SwarmInfo,
+  Node,
+  Stack,
+  Service,
+  Task,
+  Network,
+  Volume,
+  Secret,
+  Config,
+  SwarmEvent,
+} from '../types'
+
+export type ConnectionState = 'connecting' | 'connected' | 'disconnected'
 
 interface ClusterState {
   swarm: SwarmInfo | null
@@ -16,6 +29,7 @@ interface ClusterState {
   loading: boolean
   error: string | null
   lastRefresh: number
+  connectionState: ConnectionState
 
   fetchAll: () => Promise<void>
   fetchSwarm: () => Promise<void>
@@ -23,9 +37,10 @@ interface ClusterState {
   fetchServices: () => Promise<void>
   fetchTasks: () => Promise<void>
   pushEvent: (evt: SwarmEvent) => void
+  setConnectionState: (next: ConnectionState) => void
 }
 
-export const useClusterStore = create<ClusterState>((set, get) => ({
+export const useClusterStore = create<ClusterState>((set) => ({
   swarm: null,
   nodes: [],
   stacks: [],
@@ -39,9 +54,10 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
   loading: false,
   error: null,
   lastRefresh: 0,
+  connectionState: 'connecting',
 
   fetchAll: async () => {
-    set({ loading: true, error: null })
+    set({ loading: true, error: null, connectionState: 'connecting' })
     try {
       const [swarm, nodes, stacks, services, tasks, networks, volumes, secrets, configs, events] =
         await Promise.all([
@@ -56,33 +72,56 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
           api.configs.list(),
           api.events.list(),
         ])
-      set({ swarm, nodes, stacks, services, tasks, networks, volumes, secrets, configs, events, loading: false, lastRefresh: Date.now() })
+      set({
+        swarm,
+        nodes,
+        stacks,
+        services,
+        tasks,
+        networks,
+        volumes,
+        secrets,
+        configs,
+        events,
+        loading: false,
+        error: null,
+        lastRefresh: Date.now(),
+        connectionState: 'connected',
+      })
     } catch (err) {
-      set({ loading: false, error: err instanceof Error ? err.message : 'fetch failed' })
+      set({
+        loading: false,
+        error: err instanceof Error ? err.message : 'fetch failed',
+        connectionState: 'disconnected',
+      })
     }
   },
 
   fetchSwarm: async () => {
     const swarm = await api.swarm.get()
-    set({ swarm })
+    set({ swarm, connectionState: 'connected', error: null })
   },
 
   fetchNodes: async () => {
     const nodes = await api.nodes.list()
-    set({ nodes })
+    set({ nodes, connectionState: 'connected', error: null })
   },
 
   fetchServices: async () => {
     const [stacks, services] = await Promise.all([api.stacks.list(), api.services.list()])
-    set({ stacks, services })
+    set({ stacks, services, connectionState: 'connected', error: null })
   },
 
   fetchTasks: async () => {
     const tasks = await api.tasks.list()
-    set({ tasks })
+    set({ tasks, connectionState: 'connected', error: null })
   },
 
   pushEvent: (evt: SwarmEvent) => {
-    set(state => ({ events: [evt, ...state.events].slice(0, 200) }))
+    set((state) => ({ events: [evt, ...state.events].slice(0, 200) }))
+  },
+
+  setConnectionState: (next) => {
+    set({ connectionState: next })
   },
 }))

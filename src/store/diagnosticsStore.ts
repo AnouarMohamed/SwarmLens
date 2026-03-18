@@ -7,6 +7,8 @@ interface DiagnosticsState {
   loading: boolean
   running: boolean
   lastRun: number | null
+  lastDurationMs: number | null
+  error: string | null
 
   fetch: () => Promise<void>
   run: () => Promise<void>
@@ -17,24 +19,40 @@ export const useDiagnosticsStore = create<DiagnosticsState>((set) => ({
   loading: false,
   running: false,
   lastRun: null,
+  lastDurationMs: null,
+  error: null,
 
   fetch: async () => {
-    set({ loading: true })
+    set({ loading: true, error: null })
     try {
       const findings = await api.diagnostics.list()
-      set({ findings, loading: false })
-    } catch {
-      set({ loading: false })
+      set({ findings, loading: false, error: null })
+    } catch (err) {
+      set({
+        loading: false,
+        error: err instanceof Error ? err.message : 'Unable to load diagnostics findings.',
+      })
     }
   },
 
   run: async () => {
-    set({ running: true })
+    set({ running: true, error: null })
+    const start = Date.now()
     try {
       const findings = await api.diagnostics.run()
-      set({ findings: findings ?? [], running: false, lastRun: Date.now() })
-    } catch {
-      set({ running: false })
+      const finish = Date.now()
+      set({
+        findings: findings ?? [],
+        running: false,
+        lastRun: finish,
+        lastDurationMs: finish - start,
+        error: null,
+      })
+    } catch (err) {
+      set({
+        running: false,
+        error: err instanceof Error ? err.message : 'Diagnostics run failed.',
+      })
     }
   },
 }))

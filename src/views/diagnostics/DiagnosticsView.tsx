@@ -1,67 +1,352 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { GrafanaAreaSeries, GrafanaBarSeries } from '../../components/charts/GrafanaCharts'
+import { buildDiagnosticsTelemetry } from '../../lib/telemetry'
+import { relativeTime } from '../../lib/utils'
+import { useClusterStore } from '../../store/clusterStore'
 import { useDiagnosticsStore } from '../../store/diagnosticsStore'
 import { useIncidentStore } from '../../store/incidentStore'
-import { FindingRow } from '../../components/ui/FindingRow'
 import type { Finding, Severity } from '../../types'
 
 const SEVERITIES: Array<Severity | 'all'> = ['all', 'critical', 'high', 'medium', 'low', 'info']
 
+const DEMO_FINDINGS: Finding[] = [
+  {
+    id: 'demo-1',
+    severity: 'critical',
+    resource: 'service/payments-worker',
+    scope: 'services',
+    message: 'Replica drift detected in active deployment',
+    evidence: ['0/2 replicas available for 6m', 'placement constraint rejected on worker-02'],
+    recommendation: 'Relax placement constraint and redeploy payments-worker.',
+    source: 'swarm.health',
+    detectedAt: new Date(Date.now() - 6 * 60000).toISOString(),
+  },
+  {
+    id: 'demo-2',
+    severity: 'high',
+    resource: 'node/worker-02',
+    scope: 'nodes',
+    message: 'Heartbeat jitter exceeded threshold',
+    evidence: ['heartbeat delay > 4.2s', 'packet loss 7% on manager network'],
+    recommendation: 'Inspect node network path and manager reachability.',
+    source: 'swarm.scheduler',
+    detectedAt: new Date(Date.now() - 14 * 60000).toISOString(),
+  },
+  {
+    id: 'demo-3',
+    severity: 'medium',
+    resource: 'service/api-gateway',
+    scope: 'services',
+    message: 'Restart pressure increased',
+    evidence: ['3 restarts in 15m', 'rollout running in degraded pace'],
+    recommendation: 'Inspect rollout logs and tune restart policy.',
+    source: 'swarm.runtime',
+    detectedAt: new Date(Date.now() - 22 * 60000).toISOString(),
+  },
+]
+
+function cn(...parts: Array<string | false | undefined>) {
+  return parts.filter(Boolean).join(' ')
+}
+
+function severityTone(severity: Severity) {
+  return severity === 'critical' || severity === 'high' || severity === 'medium'
+    ? 'text-state-danger'
+    : 'text-text-secondary'
+}
+
 export function DiagnosticsView() {
-  const { findings, loading, running, run, fetch } = useDiagnosticsStore()
+  const navigate = useNavigate()
+  const {
+    findings,
+    loading,
+    running,
+    lastRun,
+    lastDurationMs,
+    run,
+    fetch,
+    error: diagnosticsError,
+  } = useDiagnosticsStore()
   const { create: createIncident } = useIncidentStore()
+  const { swarm, connectionState, error: clusterError } = useClusterStore()
+
   const [sevFilter, setSevFilter] = useState<Severity | 'all'>('all')
+  const [query, setQuery] = useState('')
+  const [openIds, setOpenIds] = useState<Record<string, boolean>>({})
+  const [bulkCreating, setBulkCreating] = useState(false)
 
-  useEffect(() => { fetch() }, [fetch])
+  useEffect(() => {
+    void fetch()
+  }, [fetch])
 
-  const filtered = sevFilter === 'all' ? findings : findings.filter(f => f.severity === sevFilter)
+  const disconnected = connectionState === 'disconnected' || Boolean(clusterError)
+  const useDemo = findings.length === 0 && !loading && swarm?.mode === 'demo'
+  const dataset = useDemo ? DEMO_FINDINGS : findings
 
-  const counts = SEVERITIES.reduce((acc, s) => {
-    acc[s] = s === 'all' ? findings.length : findings.filter(f => f.severity === s).length
-    return acc
-  }, {} as Record<string, number>)
+  const filtered = useMemo(() => {
+    return dataset.filter((finding) => {
+      const severityOk = sevFilter === 'all' || finding.severity === sevFilter
+      if (!severityOk) return false
+      if (!query.trim()) return true
+      const haystack = `${finding.resource} ${finding.message} ${finding.scope}`.toLowerCase()
+      return haystack.includes(query.toLowerCase())
+    })
+  }, [dataset, sevFilter, query])
 
-  async function handleCreateIncident(f: Finding) {
+  const counts = useMemo(
+    () =>
+      SEVERITIES.reduce(
+        (acc, severity) => {
+          acc[severity] =
+            severity === 'all'
+              ? dataset.length
+              : dataset.filter((finding) => finding.severity === severity).length
+          return acc
+        },
+        {} as Record<string, number>,
+      ),
+    [dataset],
+  )
+
+  const telemetry = useMemo(
+    () => buildDiagnosticsTelemetry({ findings: dataset, disconnected }),
+    [dataset, disconnected],
+  )
+
+  async function handleCreateIncident(finding: Finding) {
     await createIncident({
-      title: f.message,
-      description: f.evidence.join('\n'),
-      severity: f.severity,
-      affectedServices: [f.resource],
-      diagnosticRefs: [f.id],
+      title: finding.message,
+      description: finding.evidence.join('\n'),
+      severity: finding.severity,
+      affectedServices: [finding.resource],
+      diagnosticRefs: [finding.id],
     })
   }
 
+  async function handleCreateCriticalBatch() {
+    const critical = filtered.filter((finding) => finding.severity === 'critical')
+    if (critical.length === 0) return
+    setBulkCreating(true)
+    try {
+      for (const finding of critical) {
+        await handleCreateIncident(finding)
+      }
+      navigate('/incidents')
+    } finally {
+      setBulkCreating(false)
+    }
+  }
+
+  function exportFindings() {
+    const payload = JSON.stringify(filtered, null, 2)
+    const blob = new Blob([payload], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `swarmlens-findings-${Date.now()}.json`
+    link.click()
+    URL.revokeObjectURL(url)
+  }
+
   return (
-    <div className="view">
-      <div className="diag-toolbar">
-        <div className="filter-pills">
-          {SEVERITIES.map(s => (
+    <div className="space-y-10">
+      <section className="industrial-section border-b-0 pt-0">
+        <p className="industrial-label">Diagnostics Control</p>
+        <h2 className="mt-3 font-heading text-[2rem] uppercase leading-none tracking-[0.04em]">
+          Findings Pipeline
+        </h2>
+        <p className="mt-3 text-sm text-text-secondary">
+          {disconnected
+            ? 'Cluster is disconnected. Diagnostics are in read-only mode with last known data.'
+            : useDemo
+              ? 'Demo mode is active with enriched synthetic findings and telemetry.'
+              : `Diagnostics last run ${lastRun ? relativeTime(new Date(lastRun).toISOString()) : 'not available'}.`}
+        </p>
+        <div className="mt-5 flex flex-wrap items-center gap-8">
+          <button
+            type="button"
+            onClick={() => {
+              void run()
+            }}
+            disabled={running || disconnected}
+            className={cn(
+              'industrial-action industrial-action-accent',
+              (running || disconnected) && 'cursor-not-allowed opacity-35',
+            )}
+          >
+            {running ? 'Running Diagnostics' : 'Run Diagnostics'}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              void fetch()
+            }}
+            className="industrial-action"
+          >
+            Refresh Findings
+          </button>
+          <button
+            type="button"
+            onClick={handleCreateCriticalBatch}
+            disabled={
+              bulkCreating || filtered.filter((f) => f.severity === 'critical').length === 0
+            }
+            className={cn(
+              'industrial-action',
+              (bulkCreating || filtered.filter((f) => f.severity === 'critical').length === 0) &&
+                'cursor-not-allowed opacity-35',
+            )}
+          >
+            {bulkCreating ? 'Creating Incidents…' : 'Create Incidents for Critical'}
+          </button>
+          <button type="button" onClick={exportFindings} className="industrial-action">
+            Export Findings JSON
+          </button>
+          <span className="industrial-data text-xs text-text-tertiary">
+            Duration {lastDurationMs ? `${lastDurationMs}ms` : 'n/a'}
+          </span>
+        </div>
+      </section>
+
+      <section className="grid grid-cols-1 gap-10 xl:grid-cols-2">
+        <GrafanaAreaSeries
+          title="Severity Trend"
+          subtitle="Synthetic run history for quick trend scanning"
+          data={telemetry.severityTrend}
+          xKey="time"
+          areas={[
+            { key: 'critical', label: 'Critical', color: '#F5A623' },
+            { key: 'high', label: 'High', color: 'rgba(255,255,255,0.82)' },
+            { key: 'medium', label: 'Medium', color: 'rgba(255,255,255,0.6)' },
+          ]}
+        />
+        <GrafanaBarSeries
+          title="Findings by Scope"
+          subtitle="Top scopes requiring attention"
+          data={
+            telemetry.scopeBars.length > 0 ? telemetry.scopeBars : [{ scope: 'none', findings: 0 }]
+          }
+          xKey="scope"
+          bars={[{ key: 'findings', label: 'Findings', color: '#F5A623' }]}
+        />
+      </section>
+
+      <section>
+        <div className="flex flex-wrap items-end justify-between gap-6">
+          <div>
+            <p className="industrial-label">Finding Explorer</p>
+            <h3 className="mt-2 font-heading text-[1.85rem] uppercase leading-none tracking-[0.04em]">
+              Active Findings
+            </h3>
+          </div>
+          <input
+            className="h-9 w-72 border-b border-border-muted bg-transparent px-0 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Filter by service, node, message…"
+          />
+        </div>
+
+        <div className="mt-5 flex flex-wrap items-center gap-2">
+          {SEVERITIES.map((severity) => (
             <button
-              key={s}
-              className={'pill' + (sevFilter === s ? ' active' : '') + (s !== 'all' ? ` pill-${s}` : '')}
-              onClick={() => setSevFilter(s)}
+              key={severity}
+              type="button"
+              onClick={() => setSevFilter(severity)}
+              className={cn(
+                'industrial-action',
+                sevFilter === severity && 'industrial-action-accent',
+              )}
             >
-              {s} {counts[s] > 0 && <span className="pill-count">{counts[s]}</span>}
+              {severity.toUpperCase()} ({counts[severity] ?? 0})
             </button>
           ))}
         </div>
-        <button className="btn-primary btn-sm" onClick={run} disabled={running}>
-          {running ? '↻ running…' : '↻ run now'}
-        </button>
-      </div>
 
-      {(loading || running) && <div className="loading-bar" />}
-
-      {filtered.length === 0 && !loading && (
-        <div className="empty-state">
-          {findings.length === 0
-            ? 'No findings yet. Click "run now" to analyze the cluster.'
-            : `No ${sevFilter} findings.`}
-        </div>
-      )}
-
-      {filtered.map(f => (
-        <FindingRow key={f.id} finding={f} onCreateIncident={handleCreateIncident} />
-      ))}
+        {diagnosticsError ? (
+          <div className="mt-6 border-t border-state-danger/50 pt-6">
+            <p className="text-sm text-state-danger">Unable to load diagnostics findings</p>
+            <p className="mt-1 text-sm text-text-secondary">{diagnosticsError}</p>
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="mt-6 border-t border-border-muted pt-6">
+            <p className="text-sm text-text-primary">
+              {dataset.length === 0
+                ? 'No findings available.'
+                : `No ${sevFilter} findings for this filter.`}
+            </p>
+            <p className="mt-1 text-sm text-text-secondary">
+              Run diagnostics or broaden the filter to inspect full cluster posture.
+            </p>
+          </div>
+        ) : (
+          <ul className="mt-6 divide-y divide-border-muted">
+            {filtered.map((finding) => {
+              const open = Boolean(openIds[finding.id])
+              return (
+                <li key={finding.id}>
+                  <button
+                    type="button"
+                    onClick={() => setOpenIds((state) => ({ ...state, [finding.id]: !open }))}
+                    className="industrial-row w-full text-left focus-visible:outline-none"
+                  >
+                    <div className="flex items-start justify-between gap-6">
+                      <div className="min-w-0">
+                        <p className={cn('text-sm', severityTone(finding.severity))}>
+                          {finding.message}
+                        </p>
+                        <p className="mt-1 text-xs text-text-secondary">
+                          <span className="font-mono">{finding.resource}</span>
+                          <span className="mx-2">|</span>
+                          <span className="uppercase tracking-[0.08em]">{finding.severity}</span>
+                          <span className="mx-2">|</span>
+                          <span>{relativeTime(finding.detectedAt)}</span>
+                        </p>
+                      </div>
+                      <span className="industrial-label text-text-secondary">
+                        {open ? 'Collapse' : 'Expand'}
+                      </span>
+                    </div>
+                  </button>
+                  {open ? (
+                    <div className="px-4 pb-4 pl-8">
+                      <p className="text-sm text-text-secondary">{finding.recommendation}</p>
+                      {finding.evidence.length > 0 ? (
+                        <ul className="mt-2 space-y-1 text-xs text-text-tertiary">
+                          {finding.evidence.map((evidence) => (
+                            <li key={evidence} className="font-mono">
+                              - {evidence}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : null}
+                      <div className="mt-4 flex flex-wrap items-center gap-6">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void handleCreateIncident(finding)
+                          }}
+                          className="industrial-action industrial-action-accent"
+                        >
+                          Create Incident
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => navigate('/incidents')}
+                          className="industrial-action"
+                        >
+                          Open Incidents
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </section>
     </div>
   )
 }

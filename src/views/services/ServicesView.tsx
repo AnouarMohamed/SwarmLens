@@ -5,16 +5,17 @@ import { StatusBadge } from '../../components/ui/Badge'
 import type { Service } from '../../types'
 
 export function ServicesView() {
-  const { services, stacks, loading } = useClusterStore()
+  const { services, loading } = useClusterStore()
   const [stackFilter, setStackFilter] = useState('')
 
-  const stackNames = ['', ...Array.from(new Set(services.map(s => s.stack).filter(Boolean)))]
-  const filtered = stackFilter ? services.filter(s => s.stack === stackFilter) : services
+  const stackNames = ['', ...Array.from(new Set(services.map((s) => s.stack).filter(Boolean)))]
+  const filtered = stackFilter ? services.filter((s) => s.stack === stackFilter) : services
 
   const columns: Column<Service>[] = [
     {
-      key: 'name', header: 'Service',
-      render: s => (
+      key: 'name',
+      header: 'Service',
+      render: (s) => (
         <div>
           <span className="mono fw-medium">{s.name}</span>
           {s.stack && <span className="dim mono"> ({s.stack})</span>}
@@ -22,12 +23,14 @@ export function ServicesView() {
       ),
     },
     {
-      key: 'image', header: 'Image',
-      render: s => <span className="mono dim">{s.image.split('/').pop()}</span>,
+      key: 'image',
+      header: 'Image',
+      render: (s) => <span className="mono dim">{s.image.split('/').pop()}</span>,
     },
     {
-      key: 'replicas', header: 'Replicas',
-      render: s => (
+      key: 'replicas',
+      header: 'Replicas',
+      render: (s) => (
         <span className={s.runningTasks < s.desiredReplicas ? 'text-bad' : ''}>
           {s.runningTasks}/{s.desiredReplicas}
         </span>
@@ -35,22 +38,29 @@ export function ServicesView() {
       width: '90px',
     },
     {
-      key: 'update', header: 'Update state',
-      render: s => s.updateState
-        ? <StatusBadge status={s.updateState} />
-        : <span className="dim">—</span>,
+      key: 'update',
+      header: 'Update state',
+      render: (s) =>
+        s.updateState ? <StatusBadge status={s.updateState} /> : <span className="dim">—</span>,
       width: '140px',
     },
     {
-      key: 'ports', header: 'Ports',
-      render: s => s.publishedPorts.length > 0
-        ? <span className="mono dim">{s.publishedPorts.map(p => p.publishedPort).join(', ')}</span>
-        : <span className="dim">—</span>,
+      key: 'ports',
+      header: 'Ports',
+      render: (s) =>
+        s.publishedPorts.length > 0 ? (
+          <span className="mono dim">
+            {s.publishedPorts.map((p) => p.publishedPort).join(', ')}
+          </span>
+        ) : (
+          <span className="dim">—</span>
+        ),
       width: '100px',
     },
     {
-      key: 'mode', header: 'Mode',
-      render: s => <span className="dim">{s.mode}</span>,
+      key: 'mode',
+      header: 'Mode',
+      render: (s) => <span className="dim">{s.mode}</span>,
       width: '90px',
     },
   ]
@@ -64,10 +74,12 @@ export function ServicesView() {
           <select
             className="filter-select"
             value={stackFilter}
-            onChange={e => setStackFilter(e.target.value)}
+            onChange={(e) => setStackFilter(e.target.value)}
           >
-            {stackNames.map(n => (
-              <option key={n} value={n}>{n || 'All stacks'}</option>
+            {stackNames.map((n) => (
+              <option key={n} value={n}>
+                {n || 'All stacks'}
+              </option>
             ))}
           </select>
         </div>
@@ -75,7 +87,7 @@ export function ServicesView() {
       <ResourceTable
         columns={columns}
         rows={filtered}
-        keyFn={s => s.id}
+        keyFn={(s) => s.id}
         loading={loading}
         empty="No services found."
       />
