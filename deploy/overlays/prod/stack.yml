@@ -1,0 +1,87 @@
+version: "3.9"
+
+services:
+  swarmlens:
+    image: ${SWARMLENS_IMAGE:-ghcr.io/anouarmohamed/swarmlens:latest}
+    deploy:
+      replicas: 1
+      placement:
+        constraints: [node.role == manager]
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 3
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+        reservations:
+          cpus: "0.1"
+          memory: 64M
+      update_config:
+        parallelism: 1
+        delay: 10s
+        failure_action: rollback
+      rollback_config:
+        parallelism: 1
+        delay: 5s
+    ports:
+      - target: 8080
+        published: 8080
+        mode: host
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      APP_MODE: prod
+      AUTH_ENABLED: "true"
+      WRITE_ACTIONS_ENABLED: "false"
+      WRITE_APPROVAL_REQUIRED: "true"
+      RATE_LIMIT_ENABLED: "true"
+      DIAGNOSTICS_SCHEDULE: "60"
+    secrets:
+      - swarmlens_auth_tokens
+      - swarmlens_predictor_secret
+    networks: [swarmlens_net]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/api/v1/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  predictor:
+    image: ${SWARMLENS_PREDICTOR_IMAGE:-ghcr.io/anouarmohamed/swarmlens-predictor:latest}
+    deploy:
+      replicas: 1
+      placement:
+        constraints: [node.role == manager]
+      restart_policy:
+        condition: on-failure
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 128M
+        reservations:
+          cpus: "0.05"
+          memory: 32M
+    environment:
+      PREDICTOR_SHARED_SECRET_FILE: /run/secrets/swarmlens_predictor_secret
+    secrets:
+      - swarmlens_predictor_secret
+    networks: [swarmlens_net]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8001/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+networks:
+  swarmlens_net:
+    driver: overlay
+    attachable: false
+
+secrets:
+  swarmlens_auth_tokens:
+    external: true
+  swarmlens_predictor_secret:
+    external: true

@@ -1,0 +1,45 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      APP_MODE:              ${APP_MODE:-demo}
+      DOCKER_HOST:           unix:///var/run/docker.sock
+      AUTH_ENABLED:          ${AUTH_ENABLED:-false}
+      AUTH_TOKENS:           ${AUTH_TOKENS:-}
+      WRITE_ACTIONS_ENABLED: ${WRITE_ACTIONS_ENABLED:-false}
+      PREDICTOR_BASE_URL:    http://predictor:8001
+      PREDICTOR_SHARED_SECRET: ${PREDICTOR_SHARED_SECRET:-dev-secret}
+      ASSISTANT_PROVIDER:    ${ASSISTANT_PROVIDER:-none}
+      ASSISTANT_API_BASE_URL: ${ASSISTANT_API_BASE_URL:-}
+      ASSISTANT_API_KEY:     ${ASSISTANT_API_KEY:-}
+      ASSISTANT_MODEL:       ${ASSISTANT_MODEL:-}
+    depends_on:
+      predictor:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/api/v1/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  predictor:
+    build:
+      context: ./predictor
+      dockerfile: Dockerfile
+    ports:
+      - "8001:8001"
+    environment:
+      PREDICTOR_SHARED_SECRET: ${PREDICTOR_SHARED_SECRET:-dev-secret}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3

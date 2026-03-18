@@ -1,0 +1,30 @@
+version: "3.9"
+
+services:
+  swarmlens:
+    image: swarmlens:dev
+    deploy:
+      replicas: 1
+      placement:
+        constraints: [node.role == manager]
+    ports:
+      - "8080:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      APP_MODE: dev
+      AUTH_ENABLED: "false"
+      WRITE_ACTIONS_ENABLED: "false"
+    networks: [swarmlens_net]
+
+  predictor:
+    image: swarmlens-predictor:dev
+    deploy:
+      replicas: 1
+    environment:
+      PREDICTOR_SHARED_SECRET: "dev-secret"
+    networks: [swarmlens_net]
+
+networks:
+  swarmlens_net:
+    driver: overlay

@@ -1,0 +1,34 @@
+# Node
+node_modules/
+dist/
+.env
+.env.local
+
+# Go
+backend/swarmlens
+backend/*.test
+backend/coverage.out
+
+# Python
+predictor/__pycache__/
+predictor/app/__pycache__/
+predictor/.venv/
+predictor/.pytest_cache/
+*.pyc
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Docker
+.docker/
+
+# Screenshots
+Screenshots/*.png
+
+# Playwright
+e2e/test-results/
+e2e/playwright-report/
