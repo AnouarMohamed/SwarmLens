@@ -10,7 +10,7 @@ Swarm operations intelligence with safe execution.
 
 SwarmLens helps engineers diagnose Docker Swarm failures, execute operations safely, and manage incidents end-to-end. The core is a **deterministic diagnostic engine** that produces structured findings — severity, evidence, and a specific recommendation — for every class of Swarm failure.
 
-This is not a Portainer clone. Portainer covers generic container management. SwarmLens covers *why your Swarm is broken* and *how to fix it safely*.
+This is not a Portainer clone. Portainer covers generic container management. SwarmLens covers _why your Swarm is broken_ and _how to fix it safely_.
 
 ---
 
@@ -23,7 +23,7 @@ npm run dev
 ```
 
 - Frontend → `http://localhost:5173`
-- Backend  → `http://localhost:8080`
+- Backend → `http://localhost:8080`
 
 Runs in `demo` mode with fixture data. No Swarm required.
 
@@ -32,6 +32,7 @@ Runs in `demo` mode with fixture data. No Swarm required.
 ## Connect to a real Swarm
 
 **Unix socket (local manager):**
+
 ```bash
 # In .env
 APP_MODE=dev
@@ -39,6 +40,7 @@ DOCKER_HOST=unix:///var/run/docker.sock
 ```
 
 **TCP + TLS (remote manager):**
+
 ```bash
 APP_MODE=dev
 DOCKER_HOST=tcp://manager-host:2376
@@ -64,19 +66,20 @@ docker stack deploy -c deploy/overlays/prod/stack.yml swarmlens
 
 ## Diagnostic plugins
 
-| Plugin | Detects |
-|---|---|
-| `replica-mismatch` | Desired vs running vs pending tasks |
-| `placement-failure` | Unsatisfied constraints / resource reservation blocking |
-| `crash-loop` | Task restart churn, exit codes, healthcheck instability |
-| `image-pull-failure` | Registry unreachable, bad digest, credential issues |
-| `port-conflict` | Routing mesh / published port collisions |
-| `secret-config-ref` | Missing secret/config reference, bad target path |
-| `quorum-risk` | Manager count vs failure tolerance, Raft health |
-| `update-rollback-state` | Update paused, failure ratio tripped, rollback pending |
-| `node-pressure` | Reserved vs available CPU/memory causing pending tasks |
+| Plugin                  | Detects                                                 |
+| ----------------------- | ------------------------------------------------------- |
+| `replica-mismatch`      | Desired vs running vs pending tasks                     |
+| `placement-failure`     | Unsatisfied constraints / resource reservation blocking |
+| `crash-loop`            | Task restart churn, exit codes, healthcheck instability |
+| `image-pull-failure`    | Registry unreachable, bad digest, credential issues     |
+| `port-conflict`         | Routing mesh / published port collisions                |
+| `secret-config-ref`     | Missing secret/config reference, bad target path        |
+| `quorum-risk`           | Manager count vs failure tolerance, Raft health         |
+| `update-rollback-state` | Update paused, failure ratio tripped, rollback pending  |
+| `node-pressure`         | Reserved vs available CPU/memory causing pending tasks  |
 
 Output format:
+
 ```json
 {
   "severity": "critical",
@@ -93,11 +96,11 @@ Output format:
 
 ## Modes
 
-| Mode | Auth | Writes | Use case |
-|---|---|---|---|
-| `dev` | Off | Off | Local engineering |
-| `demo` | Off | Off | Safe showcase with fixtures |
-| `prod` | **Required** | Opt-in | Controlled production ops |
+| Mode   | Auth         | Writes | Use case                    |
+| ------ | ------------ | ------ | --------------------------- |
+| `dev`  | Off          | Off    | Local engineering           |
+| `demo` | Off          | Off    | Safe showcase with fixtures |
+| `prod` | **Required** | Opt-in | Controlled production ops   |
 
 `WRITE_ACTIONS_ENABLED=false` by default in all modes.
 `prod` refuses to boot without `AUTH_ENABLED=true`.
@@ -107,12 +110,14 @@ Output format:
 ## Auth
 
 Static token:
+
 ```bash
 AUTH_ENABLED=true
 AUTH_TOKENS=viewer:viewer:token1,operator:operator:token2,admin:admin:token3
 ```
 
 OIDC:
+
 ```bash
 AUTH_ENABLED=true
 AUTH_PROVIDER=oidc
@@ -120,23 +125,36 @@ AUTH_OIDC_ISSUER_URL=https://your-idp/.well-known/openid-configuration
 AUTH_OIDC_CLIENT_ID=swarmlens
 ```
 
-| Role | Permissions |
-|---|---|
-| `viewer` | Read-only — all views, events, diagnostics |
-| `operator` | viewer + write actions (if gate enabled) |
-| `admin` | operator + policy + force actions |
+| Role       | Permissions                                |
+| ---------- | ------------------------------------------ |
+| `viewer`   | Read-only — all views, events, diagnostics |
+| `operator` | viewer + write actions (if gate enabled)   |
+| `admin`    | operator + policy + force actions          |
 
 ---
 
 ## Observability
 
-| Endpoint | Description |
-|---|---|
-| `GET /api/v1/healthz` | Liveness |
-| `GET /api/v1/readyz` | Readiness |
-| `GET /api/v1/metrics` | JSON telemetry |
-| `GET /api/v1/metrics/prometheus` | Prometheus format |
-| `GET /api/v1/runtime` | Mode and security posture |
+| Endpoint                         | Description               |
+| -------------------------------- | ------------------------- |
+| `GET /api/v1/healthz`            | Liveness                  |
+| `GET /api/v1/readyz`             | Readiness                 |
+| `GET /api/v1/metrics`            | JSON telemetry            |
+| `GET /api/v1/metrics/prometheus` | Prometheus format         |
+| `GET /api/v1/runtime`            | Mode and security posture |
+
+### Grafana dashboard embed
+
+If you have Grafana available, the frontend can render live panel embeds on
+Overview and Diagnostics.
+
+```bash
+VITE_GRAFANA_URL=https://grafana.example.com
+VITE_GRAFANA_DASHBOARD_UID=swarmlens-main
+VITE_GRAFANA_ORG_ID=1
+VITE_GRAFANA_THEME=dark
+VITE_GRAFANA_REFRESH=30s
+```
 
 ---
 
@@ -200,16 +218,16 @@ docs/                    PRODUCT_SPEC, ARCHITECTURE, API, SECURITY, IMPLEMENTATI
 
 ## Comparison
 
-| Capability | SwarmLens | Portainer | Swarmpit |
-|---|---|---|---|
-| Deterministic diagnostics | ✅ | ❌ | ❌ |
-| Evidence-based failure analysis | ✅ | ❌ | ❌ |
-| Incident + runbook workflow | ✅ | ❌ | ❌ |
-| Audit trail with spec snapshots | ✅ | Partial | ❌ |
-| Four-eyes approval for risky ops | ✅ | ❌ | ❌ |
-| Write gate (safe by default) | ✅ | ❌ | ❌ |
-| Real-time SSE event stream | ✅ | Partial | Partial |
-| Optional AI assistant | ✅ | ❌ | ❌ |
+| Capability                       | SwarmLens | Portainer | Swarmpit |
+| -------------------------------- | --------- | --------- | -------- |
+| Deterministic diagnostics        | ✅        | ❌        | ❌       |
+| Evidence-based failure analysis  | ✅        | ❌        | ❌       |
+| Incident + runbook workflow      | ✅        | ❌        | ❌       |
+| Audit trail with spec snapshots  | ✅        | Partial   | ❌       |
+| Four-eyes approval for risky ops | ✅        | ❌        | ❌       |
+| Write gate (safe by default)     | ✅        | ❌        | ❌       |
+| Real-time SSE event stream       | ✅        | Partial   | Partial  |
+| Optional AI assistant            | ✅        | ❌        | ❌       |
 
 ---
 

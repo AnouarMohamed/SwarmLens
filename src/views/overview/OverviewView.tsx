@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { GrafanaEmbed } from '../../components/charts/GrafanaEmbed'
 import { relativeTime } from '../../lib/utils'
+import { grafanaConfig } from '../../lib/grafana'
 import { buildOverviewTelemetry } from '../../lib/telemetry'
 import { useClusterStore } from '../../store/clusterStore'
 import { useDiagnosticsStore } from '../../store/diagnosticsStore'
@@ -843,6 +845,7 @@ export function OverviewView() {
     ],
     [criticalFindings, warningFindings, findings.length],
   )
+  const grafana = grafanaConfig()
 
   const canRunDiagnostics = !model.disconnected && !running
   const findingsError = diagError || incidentsError
@@ -932,47 +935,78 @@ export function OverviewView() {
       <section className="industrial-section">
         <div className="mx-auto w-full max-w-[1440px] px-4 sm:px-6 lg:px-10">
           <p className="industrial-label">Telemetry Graphs</p>
-          <div className="mt-6 grid grid-cols-1 gap-10 xl:grid-cols-2">
-            <GrafanaTimeSeries
-              title="Task Throughput"
-              subtitle="Running vs failed tasks over the last 90 minutes"
-              data={telemetry.throughput}
-              xKey="time"
-              lines={[
-                { key: 'running', label: 'Running', color: 'rgba(255,255,255,0.85)' },
-                { key: 'failed', label: 'Failed', color: '#F5A623' },
-              ]}
-            />
-            <GrafanaAreaSeries
-              title="Findings Pressure"
-              subtitle="Critical and warning signals over time"
-              data={telemetry.throughput}
-              xKey="time"
-              areas={[
-                { key: 'critical', label: 'Critical', color: '#F5A623' },
-                { key: 'warning', label: 'Warning', color: 'rgba(255,255,255,0.7)' },
-              ]}
-            />
-          </div>
-          <div className="mt-10 grid grid-cols-1 gap-10 xl:grid-cols-2">
-            <GrafanaTimeSeries
-              title="Node Availability"
-              subtitle="Managers and workers online"
-              data={telemetry.nodeHealth}
-              xKey="time"
-              lines={[
-                { key: 'managers', label: 'Managers', color: '#F5A623' },
-                { key: 'workers', label: 'Workers', color: 'rgba(255,255,255,0.8)' },
-              ]}
-            />
-            <GrafanaBarSeries
-              title="Current Finding Mix"
-              subtitle="Severity split in the current window"
-              data={findingDistribution}
-              xKey="bucket"
-              bars={[{ key: 'findings', label: 'Findings', color: '#F5A623' }]}
-            />
-          </div>
+          {grafana.enabled ? (
+            <>
+              <div className="mt-6 grid grid-cols-1 gap-10 xl:grid-cols-2">
+                <GrafanaEmbed
+                  panelId={1}
+                  title="Cluster Task Throughput"
+                  subtitle="Live panel from Grafana"
+                />
+                <GrafanaEmbed
+                  panelId={2}
+                  title="Failure Pressure"
+                  subtitle="Critical and warning findings"
+                />
+              </div>
+              <div className="mt-10 grid grid-cols-1 gap-10 xl:grid-cols-2">
+                <GrafanaEmbed
+                  panelId={3}
+                  title="Node Availability"
+                  subtitle="Managers and workers online"
+                />
+                <GrafanaEmbed
+                  panelId={4}
+                  title="Severity Distribution"
+                  subtitle="Current findings mix"
+                />
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="mt-6 grid grid-cols-1 gap-10 xl:grid-cols-2">
+                <GrafanaTimeSeries
+                  title="Task Throughput"
+                  subtitle="Running vs failed tasks over the last 90 minutes"
+                  data={telemetry.throughput}
+                  xKey="time"
+                  lines={[
+                    { key: 'running', label: 'Running', color: 'rgba(255,255,255,0.85)' },
+                    { key: 'failed', label: 'Failed', color: '#F5A623' },
+                  ]}
+                />
+                <GrafanaAreaSeries
+                  title="Findings Pressure"
+                  subtitle="Critical and warning signals over time"
+                  data={telemetry.throughput}
+                  xKey="time"
+                  areas={[
+                    { key: 'critical', label: 'Critical', color: '#F5A623' },
+                    { key: 'warning', label: 'Warning', color: 'rgba(255,255,255,0.7)' },
+                  ]}
+                />
+              </div>
+              <div className="mt-10 grid grid-cols-1 gap-10 xl:grid-cols-2">
+                <GrafanaTimeSeries
+                  title="Node Availability"
+                  subtitle="Managers and workers online"
+                  data={telemetry.nodeHealth}
+                  xKey="time"
+                  lines={[
+                    { key: 'managers', label: 'Managers', color: '#F5A623' },
+                    { key: 'workers', label: 'Workers', color: 'rgba(255,255,255,0.8)' },
+                  ]}
+                />
+                <GrafanaBarSeries
+                  title="Current Finding Mix"
+                  subtitle="Severity split in the current window"
+                  data={findingDistribution}
+                  xKey="bucket"
+                  bars={[{ key: 'findings', label: 'Findings', color: '#F5A623' }]}
+                />
+              </div>
+            </>
+          )}
         </div>
       </section>
 

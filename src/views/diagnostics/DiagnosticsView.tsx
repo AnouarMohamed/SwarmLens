@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { GrafanaEmbed } from '../../components/charts/GrafanaEmbed'
 import { GrafanaAreaSeries, GrafanaBarSeries } from '../../components/charts/GrafanaCharts'
+import { grafanaConfig } from '../../lib/grafana'
 import { buildDiagnosticsTelemetry } from '../../lib/telemetry'
 import { relativeTime } from '../../lib/utils'
 import { useClusterStore } from '../../store/clusterStore'
@@ -113,6 +115,7 @@ export function DiagnosticsView() {
     () => buildDiagnosticsTelemetry({ findings: dataset, disconnected }),
     [dataset, disconnected],
   )
+  const grafana = grafanaConfig()
 
   async function handleCreateIncident(finding: Finding) {
     await createIncident({
@@ -198,7 +201,7 @@ export function DiagnosticsView() {
                 'cursor-not-allowed opacity-35',
             )}
           >
-            {bulkCreating ? 'Creating Incidents…' : 'Create Incidents for Critical'}
+            {bulkCreating ? 'Creating Incidents...' : 'Create Incidents for Critical'}
           </button>
           <button type="button" onClick={exportFindings} className="industrial-action">
             Export Findings JSON
@@ -209,28 +212,41 @@ export function DiagnosticsView() {
         </div>
       </section>
 
-      <section className="grid grid-cols-1 gap-10 xl:grid-cols-2">
-        <GrafanaAreaSeries
-          title="Severity Trend"
-          subtitle="Synthetic run history for quick trend scanning"
-          data={telemetry.severityTrend}
-          xKey="time"
-          areas={[
-            { key: 'critical', label: 'Critical', color: '#F5A623' },
-            { key: 'high', label: 'High', color: 'rgba(255,255,255,0.82)' },
-            { key: 'medium', label: 'Medium', color: 'rgba(255,255,255,0.6)' },
-          ]}
-        />
-        <GrafanaBarSeries
-          title="Findings by Scope"
-          subtitle="Top scopes requiring attention"
-          data={
-            telemetry.scopeBars.length > 0 ? telemetry.scopeBars : [{ scope: 'none', findings: 0 }]
-          }
-          xKey="scope"
-          bars={[{ key: 'findings', label: 'Findings', color: '#F5A623' }]}
-        />
-      </section>
+      {grafana.enabled ? (
+        <section className="grid grid-cols-1 gap-10 xl:grid-cols-2">
+          <GrafanaEmbed
+            panelId={11}
+            title="Severity Trend"
+            subtitle="Live diagnostics trend from Grafana"
+          />
+          <GrafanaEmbed panelId={12} title="Findings by Scope" subtitle="Top diagnostic scopes" />
+        </section>
+      ) : (
+        <section className="grid grid-cols-1 gap-10 xl:grid-cols-2">
+          <GrafanaAreaSeries
+            title="Severity Trend"
+            subtitle="Synthetic run history for quick trend scanning"
+            data={telemetry.severityTrend}
+            xKey="time"
+            areas={[
+              { key: 'critical', label: 'Critical', color: '#F5A623' },
+              { key: 'high', label: 'High', color: 'rgba(255,255,255,0.82)' },
+              { key: 'medium', label: 'Medium', color: 'rgba(255,255,255,0.6)' },
+            ]}
+          />
+          <GrafanaBarSeries
+            title="Findings by Scope"
+            subtitle="Top scopes requiring attention"
+            data={
+              telemetry.scopeBars.length > 0
+                ? telemetry.scopeBars
+                : [{ scope: 'none', findings: 0 }]
+            }
+            xKey="scope"
+            bars={[{ key: 'findings', label: 'Findings', color: '#F5A623' }]}
+          />
+        </section>
+      )}
 
       <section>
         <div className="flex flex-wrap items-end justify-between gap-6">
@@ -244,7 +260,7 @@ export function DiagnosticsView() {
             className="h-9 w-72 border-b border-border-muted bg-transparent px-0 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Filter by service, node, message…"
+            placeholder="Filter by service, node, message..."
           />
         </div>
 
