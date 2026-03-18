@@ -1,5 +1,5 @@
 # ── Stage 1: Build Go backend ────────────────────────────────────────────────
-FROM golang:1.23-alpine AS backend-builder
+FROM golang:1.25-alpine AS backend-builder
 WORKDIR /build
 COPY backend/go.mod backend/go.sum ./
 RUN go mod download
