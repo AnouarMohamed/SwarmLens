@@ -8,37 +8,37 @@ import (
 )
 
 type Config struct {
-	AppMode             string
-	Port                int
-	DockerHost          string
-	DockerTLSVerify     bool
-	DockerCertPath      string
-	AuthEnabled         bool
-	AuthTokens          string
-	AuthProvider        string
-	OIDCIssuerURL       string
-	OIDCClientID        string
-	OIDCUsernameClaim   string
-	OIDCRoleClaim       string
-	TrustedProxyCIDRs   string
-	WriteActionsEnabled bool
+	AppMode               string
+	Port                  int
+	DockerHost            string
+	DockerTLSVerify       bool
+	DockerCertPath        string
+	AuthEnabled           bool
+	AuthTokens            string
+	AuthProvider          string
+	OIDCIssuerURL         string
+	OIDCClientID          string
+	OIDCUsernameClaim     string
+	OIDCRoleClaim         string
+	TrustedProxyCIDRs     string
+	WriteActionsEnabled   bool
 	WriteApprovalRequired bool
-	DiagnosticsSchedule int
-	PredictorBaseURL    string
-	PredictorSecret     string
-	AssistantProvider   string
-	AssistantBaseURL    string
-	AssistantAPIKey     string
-	AssistantModel      string
-	AssistantRAGEnabled bool
-	RateLimitEnabled    bool
-	RateLimitRequests   int
-	RateLimitWindowSecs int
-	OTELEndpoint        string
-	OTELServiceName     string
-	SlackWebhookURL     string
-	AlertmanagerURL     string
-	PagerDutyKey        string
+	DiagnosticsSchedule   int
+	PredictorBaseURL      string
+	PredictorSecret       string
+	AssistantProvider     string
+	AssistantBaseURL      string
+	AssistantAPIKey       string
+	AssistantModel        string
+	AssistantRAGEnabled   bool
+	RateLimitEnabled      bool
+	RateLimitRequests     int
+	RateLimitWindowSecs   int
+	OTELEndpoint          string
+	OTELServiceName       string
+	SlackWebhookURL       string
+	AlertmanagerURL       string
+	PagerDutyKey          string
 }
 
 // Load reads config from environment, applies defaults, validates.

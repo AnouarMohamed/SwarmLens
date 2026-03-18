@@ -16,7 +16,10 @@ func (p *CrashLoop) Name() string { return "crash-loop" }
 const crashRestartThreshold = 3
 
 func (p *CrashLoop) Analyze(snap model.Snapshot) []model.Finding {
-	type taskStat struct{ max int; worst model.Task }
+	type taskStat struct {
+		max   int
+		worst model.Task
+	}
 	byService := make(map[string]*taskStat)
 
 	for _, t := range snap.Tasks {

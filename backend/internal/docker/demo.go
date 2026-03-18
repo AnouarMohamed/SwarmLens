@@ -60,10 +60,10 @@ func DemoSnapshot() model.Snapshot {
 				Image: "acme/payments-api:v2.1.0", Mode: "replicated",
 				DesiredReplicas: 3, RunningTasks: 3, UpdateState: "completed",
 				PublishedPorts: []model.PublishedPort{{PublishedPort: 8080, TargetPort: 8080, Protocol: "tcp"}},
-				NetworkRefs: []string{"payments_default"},
-				SecretRefs:  []string{"db_password"},
-				CreatedAt: time.Now().Add(-48 * time.Hour),
-				UpdatedAt: time.Now().Add(-2 * time.Hour),
+				NetworkRefs:    []string{"payments_default"},
+				SecretRefs:     []string{"db_password"},
+				CreatedAt:      time.Now().Add(-48 * time.Hour),
+				UpdatedAt:      time.Now().Add(-2 * time.Hour),
 			},
 			{
 				// triggers: replica-mismatch (0/2) + crash-loop
@@ -72,8 +72,8 @@ func DemoSnapshot() model.Snapshot {
 				DesiredReplicas: 2, RunningTasks: 0, FailedTasks: 8, UpdateState: "completed",
 				NetworkRefs: []string{"payments_default"},
 				SecretRefs:  []string{"db_password", "redis_url"},
-				CreatedAt: time.Now().Add(-48 * time.Hour),
-				UpdatedAt: time.Now().Add(-30 * time.Minute),
+				CreatedAt:   time.Now().Add(-48 * time.Hour),
+				UpdatedAt:   time.Now().Add(-30 * time.Minute),
 			},
 			{
 				// triggers: secret-config-ref (smtp_password missing) + image-pull-failure
@@ -81,8 +81,8 @@ func DemoSnapshot() model.Snapshot {
 				Image: "acme/notifier:latest", Mode: "replicated",
 				DesiredReplicas: 1, RunningTasks: 0, UpdateState: "completed",
 				SecretRefs: []string{"smtp_password"},
-				CreatedAt: time.Now().Add(-24 * time.Hour),
-				UpdatedAt: time.Now().Add(-1 * time.Hour),
+				CreatedAt:  time.Now().Add(-24 * time.Hour),
+				UpdatedAt:  time.Now().Add(-1 * time.Hour),
 			},
 			{
 				// triggers: update-rollback-state (paused)
@@ -90,8 +90,8 @@ func DemoSnapshot() model.Snapshot {
 				Image: "acme/frontend:v3.0.0", Mode: "replicated",
 				DesiredReplicas: 2, RunningTasks: 1, UpdateState: "paused",
 				PublishedPorts: []model.PublishedPort{{PublishedPort: 443, TargetPort: 3000, Protocol: "tcp"}},
-				CreatedAt: time.Now().Add(-72 * time.Hour),
-				UpdatedAt: time.Now().Add(-10 * time.Minute),
+				CreatedAt:      time.Now().Add(-72 * time.Hour),
+				UpdatedAt:      time.Now().Add(-10 * time.Minute),
 			},
 			{
 				// triggers: placement-failure (gpu label missing)
@@ -99,8 +99,8 @@ func DemoSnapshot() model.Snapshot {
 				Image: "acme/ml:v1.0.0", Mode: "replicated",
 				DesiredReplicas: 2, RunningTasks: 0, UpdateState: "completed",
 				Constraints: []string{"node.labels.gpu==true"},
-				CreatedAt: time.Now().Add(-1 * time.Hour),
-				UpdatedAt: time.Now().Add(-1 * time.Hour),
+				CreatedAt:   time.Now().Add(-1 * time.Hour),
+				UpdatedAt:   time.Now().Add(-1 * time.Hour),
 			},
 		},
 		Tasks: []model.Task{

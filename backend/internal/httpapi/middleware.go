@@ -94,8 +94,8 @@ type rateLimiter struct {
 }
 
 type bucket struct {
-	count    int
-	resetAt  time.Time
+	count   int
+	resetAt time.Time
 }
 
 func middlewareRateLimit(cfg config.Config) func(http.Handler) http.Handler {

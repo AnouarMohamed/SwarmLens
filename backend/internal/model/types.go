@@ -74,28 +74,28 @@ type Stack struct {
 // ── Services ──────────────────────────────────────────────────────────────────
 
 type Service struct {
-	ID                  string         `json:"id"`
-	Name                string         `json:"name"`
-	Stack               string         `json:"stack"`
-	Image               string         `json:"image"`
-	Mode                string         `json:"mode"`
-	DesiredReplicas     int            `json:"desiredReplicas"`
-	RunningTasks        int            `json:"runningTasks"`
-	FailedTasks         int            `json:"failedTasks"`
-	UpdateState         string         `json:"updateState"`
-	UpdateParallelism   uint64         `json:"updateParallelism"`
-	UpdateDelay         string         `json:"updateDelay"`
-	UpdateFailureAction string         `json:"updateFailureAction"`
-	RollbackParallelism uint64         `json:"rollbackParallelism"`
-	RollbackDelay       string         `json:"rollbackDelay"`
-	Constraints         []string       `json:"constraints"`
-	Preferences         []string       `json:"preferences"`
+	ID                  string          `json:"id"`
+	Name                string          `json:"name"`
+	Stack               string          `json:"stack"`
+	Image               string          `json:"image"`
+	Mode                string          `json:"mode"`
+	DesiredReplicas     int             `json:"desiredReplicas"`
+	RunningTasks        int             `json:"runningTasks"`
+	FailedTasks         int             `json:"failedTasks"`
+	UpdateState         string          `json:"updateState"`
+	UpdateParallelism   uint64          `json:"updateParallelism"`
+	UpdateDelay         string          `json:"updateDelay"`
+	UpdateFailureAction string          `json:"updateFailureAction"`
+	RollbackParallelism uint64          `json:"rollbackParallelism"`
+	RollbackDelay       string          `json:"rollbackDelay"`
+	Constraints         []string        `json:"constraints"`
+	Preferences         []string        `json:"preferences"`
 	PublishedPorts      []PublishedPort `json:"publishedPorts"`
-	SecretRefs          []string       `json:"secretRefs"`
-	ConfigRefs          []string       `json:"configRefs"`
-	NetworkRefs         []string       `json:"networkRefs"`
-	CreatedAt           time.Time      `json:"createdAt"`
-	UpdatedAt           time.Time      `json:"updatedAt"`
+	SecretRefs          []string        `json:"secretRefs"`
+	ConfigRefs          []string        `json:"configRefs"`
+	NetworkRefs         []string        `json:"networkRefs"`
+	CreatedAt           time.Time       `json:"createdAt"`
+	UpdatedAt           time.Time       `json:"updatedAt"`
 }
 
 type PublishedPort struct {
@@ -200,27 +200,27 @@ type Finding struct {
 // ── Incidents ─────────────────────────────────────────────────────────────────
 
 type Incident struct {
-	ID               string           `json:"id"`
-	Title            string           `json:"title"`
-	Description      string           `json:"description"`
-	Severity         string           `json:"severity"`
-	Status           string           `json:"status"`
-	CreatedBy        string           `json:"createdBy"`
-	CreatedAt        time.Time        `json:"createdAt"`
-	UpdatedAt        time.Time        `json:"updatedAt"`
-	ResolvedAt       *time.Time       `json:"resolvedAt,omitempty"`
-	AffectedServices []string         `json:"affectedServices"`
-	DiagnosticRefs   []string         `json:"diagnosticRefs"`
-	RunbookSteps     []RunbookStep    `json:"runbookSteps"`
-	Timeline         []TimelineEntry  `json:"timeline"`
+	ID               string          `json:"id"`
+	Title            string          `json:"title"`
+	Description      string          `json:"description"`
+	Severity         string          `json:"severity"`
+	Status           string          `json:"status"`
+	CreatedBy        string          `json:"createdBy"`
+	CreatedAt        time.Time       `json:"createdAt"`
+	UpdatedAt        time.Time       `json:"updatedAt"`
+	ResolvedAt       *time.Time      `json:"resolvedAt,omitempty"`
+	AffectedServices []string        `json:"affectedServices"`
+	DiagnosticRefs   []string        `json:"diagnosticRefs"`
+	RunbookSteps     []RunbookStep   `json:"runbookSteps"`
+	Timeline         []TimelineEntry `json:"timeline"`
 }
 
 type RunbookStep struct {
-	ID          string  `json:"id"`
-	Title       string  `json:"title"`
-	Description string  `json:"description"`
-	Status      string  `json:"status"`
-	CompletedBy string  `json:"completedBy,omitempty"`
+	ID          string     `json:"id"`
+	Title       string     `json:"title"`
+	Description string     `json:"description"`
+	Status      string     `json:"status"`
+	CompletedBy string     `json:"completedBy,omitempty"`
 	CompletedAt *time.Time `json:"completedAt,omitempty"`
 }
 

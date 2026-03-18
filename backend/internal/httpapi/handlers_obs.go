@@ -44,10 +44,10 @@ func (d *deps) handleMetricsPrometheus(w http.ResponseWriter, r *http.Request) {
 
 func (d *deps) handleRuntime(w http.ResponseWriter, r *http.Request) {
 	writeOK(w, map[string]interface{}{
-		"mode":          d.cfg.AppMode,
-		"auth_enabled":  d.cfg.AuthEnabled,
+		"mode":           d.cfg.AppMode,
+		"auth_enabled":   d.cfg.AuthEnabled,
 		"writes_enabled": d.cfg.WriteActionsEnabled,
-		"demo":          d.docker.IsDemo(),
+		"demo":           d.docker.IsDemo(),
 	})
 }
 
