@@ -1,20 +1,35 @@
-# SwarmLens
+﻿# SwarmLens
 
-Swarm operations intelligence with safe execution.
+SwarmLens is an operations console for Docker Swarm clusters.
 
-**Stack:** React + Vite · Go API · FastAPI predictor · Docker Stack
+It combines deterministic diagnostics, operational telemetry, incident workflows, and AI-assisted triage in one product-oriented UI.
 
----
+## What you get
 
-## What it is
+- Live or demo inventory of cluster, nodes, stacks, services, tasks, networks, volumes, secrets, and configs.
+- Deterministic diagnostics engine with plugin-based findings and evidence.
+- Operational telemetry and risk trends (`/api/v1/ops/metrics`) with service risk hot spots.
+- Hybrid insights (`/api/v1/ops/insights`): deterministic baseline plus optional OpenAI narrative layer.
+- Action orchestrator (`/api/v1/actions/execute`) with structured outcomes and audit IDs.
+- Incident lifecycle (`/api/v1/incidents`) and append-only audit log (`/api/v1/audit`).
+- Assistant SSE stream (`/api/v1/assistant/chat`) with hypotheses and recommended actions.
+- Grafana panel embedding when frontend `VITE_GRAFANA_*` vars are configured.
 
-SwarmLens helps engineers diagnose Docker Swarm failures, execute operations safely, and manage incidents end-to-end. The core is a **deterministic diagnostic engine** that produces structured findings — severity, evidence, and a specific recommendation — for every class of Swarm failure.
+## Runtime modes
 
-This is not a Portainer clone. Portainer covers generic container management. SwarmLens covers _why your Swarm is broken_ and _how to fix it safely_.
+| Mode   | Purpose                                    | Auth           | Mutations            |
+| ------ | ------------------------------------------ | -------------- | -------------------- |
+| `demo` | Product demo without external dependencies | Off by default | Simulated or dry-run |
+| `dev`  | Local development against real Swarm       | Optional       | Policy controlled    |
+| `prod` | Production deployment                      | Required       | Policy controlled    |
 
----
+Important defaults:
 
-## Quick start
+- `APP_MODE=demo`
+- `WRITE_ACTIONS_ENABLED=false`
+- `LIVE_ACTION_POLICY=read_only_dry_run`
+
+## Quick start (demo)
 
 ```bash
 cp .env.example .env
@@ -22,24 +37,19 @@ npm install
 npm run dev
 ```
 
-- Frontend → `http://localhost:5173`
-- Backend → `http://localhost:8080`
-
-Runs in `demo` mode with fixture data. No Swarm required.
-
----
+- Frontend: `http://localhost:5173`
+- Backend API: `http://localhost:8080/api/v1`
 
 ## Connect to a real Swarm
 
-**Unix socket (local manager):**
+Set in `.env`:
 
 ```bash
-# In .env
 APP_MODE=dev
 DOCKER_HOST=unix:///var/run/docker.sock
 ```
 
-**TCP + TLS (remote manager):**
+For remote manager via TLS:
 
 ```bash
 APP_MODE=dev
@@ -48,25 +58,72 @@ DOCKER_TLS_VERIFY=true
 DOCKER_CERT_PATH=/path/to/certs
 ```
 
----
+## Auth and roles
 
-## Deploy to Swarm
+When `AUTH_ENABLED=true`, send `Authorization: Bearer <token>`.
+
+Static token format:
 
 ```bash
-# Demo — no auth, no writes
-docker stack deploy -c deploy/overlays/demo/stack.yml swarmlens
-
-# Production — requires creating secrets first
-docker secret create swarmlens_auth_tokens - <<< "admin:admin:your-strong-token"
-docker secret create swarmlens_predictor_secret - <<< "your-predictor-secret"
-docker stack deploy -c deploy/overlays/prod/stack.yml swarmlens
+AUTH_TOKENS=viewer:viewer:token1,operator:operator:token2,admin:admin:token3
 ```
 
----
+Role model:
 
-## Production automation (VPS)
+- `viewer`: read endpoints + diagnostics + assistant
+- `operator`: viewer + write-gated action endpoints
+- `admin`: operator privileges (plus policy-level governance)
 
-Use the production env template and rollout scripts:
+## Write safety model
+
+- Global gate: `WRITE_ACTIONS_ENABLED`
+- Policy: `LIVE_ACTION_POLICY`
+  - `read_only_dry_run`: read-only actions execute, mutations return validated plans
+  - `allowlist_live`: allowlist intent only (current mutation adapters still dry-run)
+  - `demo_only`: live mutations blocked outside demo
+- Every action outcome includes status, mode, and `auditID`.
+
+## Demo mode scenarios
+
+Overview supports forced scenarios with query params:
+
+- `/?scenario=healthy`
+- `/?scenario=degraded`
+- `/?scenario=incident-burst`
+- `/?scenario=recovery`
+- `/?scenario=disconnected`
+
+Diagnostics and events also include deterministic synthetic datasets in demo for richer walkthroughs.
+
+## Grafana and charting
+
+SwarmLens renders native ECharts by default.
+
+Set these frontend variables to switch selected sections to Grafana embeds:
+
+```bash
+VITE_GRAFANA_URL=https://grafana.example.com
+VITE_GRAFANA_DASHBOARD_UID=swarmlens-main
+VITE_GRAFANA_ORG_ID=1
+VITE_GRAFANA_THEME=dark
+VITE_GRAFANA_FROM=now-6h
+VITE_GRAFANA_TO=now
+VITE_GRAFANA_REFRESH=30s
+VITE_GRAFANA_KIOSK=tv
+VITE_GRAFANA_DATASOURCE=Prometheus
+```
+
+## Local Docker run
+
+```bash
+npm run docker:up
+npm run docker:logs
+npm run docker:down
+```
+
+## Production deployment
+
+Use the production template and scripts:
 
 ```bash
 cp deploy/env/prod.env.example .env
@@ -83,186 +140,76 @@ Rollback:
 ROLLBACK_TO=<sha-or-tag> ./scripts/rollback.sh
 ```
 
-Use `_FILE` secrets in production where possible:
-`AUTH_TOKENS_FILE`, `PREDICTOR_SHARED_SECRET_FILE`, `ASSISTANT_API_KEY_FILE`.
+Use file-based secrets where possible:
 
-Full guide: [docs/PRODUCTION.md](docs/PRODUCTION.md)
+- `AUTH_TOKENS_FILE`
+- `PREDICTOR_SHARED_SECRET_FILE`
+- `ASSISTANT_API_KEY_FILE`
 
----
+See [docs/PRODUCTION.md](docs/PRODUCTION.md).
 
-## Diagnostic plugins
+## CI/CD
 
-| Plugin                  | Detects                                                 |
-| ----------------------- | ------------------------------------------------------- |
-| `replica-mismatch`      | Desired vs running vs pending tasks                     |
-| `placement-failure`     | Unsatisfied constraints / resource reservation blocking |
-| `crash-loop`            | Task restart churn, exit codes, healthcheck instability |
-| `image-pull-failure`    | Registry unreachable, bad digest, credential issues     |
-| `port-conflict`         | Routing mesh / published port collisions                |
-| `secret-config-ref`     | Missing secret/config reference, bad target path        |
-| `quorum-risk`           | Manager count vs failure tolerance, Raft health         |
-| `update-rollback-state` | Update paused, failure ratio tripped, rollback pending  |
-| `node-pressure`         | Reserved vs available CPU/memory causing pending tasks  |
+- CI workflow runs backend format/vet/test, frontend lint/typecheck/test/build, predictor tests, and Docker smoke build.
+- Release workflow builds and pushes multi-arch images to GHCR on `v*` tags.
 
-Output format:
+See [docs/CI_CD.md](docs/CI_CD.md).
 
-```json
-{
-  "severity": "critical",
-  "resource": "payments/worker",
-  "scope": "service",
-  "message": "Service worker has 0/2 running tasks.",
-  "evidence": ["desired replicas: 2", "running tasks: 0", "shortfall: 2"],
-  "recommendation": "Check task failure reasons in the Tasks view.",
-  "source": "replica-mismatch"
-}
-```
-
----
-
-## Modes
-
-| Mode   | Auth         | Writes | Use case                    |
-| ------ | ------------ | ------ | --------------------------- |
-| `dev`  | Off          | Off    | Local engineering           |
-| `demo` | Off          | Off    | Safe showcase with fixtures |
-| `prod` | **Required** | Opt-in | Controlled production ops   |
-
-`WRITE_ACTIONS_ENABLED=false` by default in all modes.
-`prod` refuses to boot without `AUTH_ENABLED=true`.
-
----
-
-## Auth
-
-Static token:
+## Development commands
 
 ```bash
-AUTH_ENABLED=true
-AUTH_TOKENS=viewer:viewer:token1,operator:operator:token2,admin:admin:token3
+npm run lint
+npm run lint:ci
+npm run typecheck
+npm run test:web
+npm run test:go
+npm run test:predictor
+npm run build
 ```
 
-OIDC:
+## Repository layout
 
-```bash
-AUTH_ENABLED=true
-AUTH_PROVIDER=oidc
-AUTH_OIDC_ISSUER_URL=https://your-idp/.well-known/openid-configuration
-AUTH_OIDC_CLIENT_ID=swarmlens
-```
-
-| Role       | Permissions                                |
-| ---------- | ------------------------------------------ |
-| `viewer`   | Read-only — all views, events, diagnostics |
-| `operator` | viewer + write actions (if gate enabled)   |
-| `admin`    | operator + policy + force actions          |
-
----
-
-## Observability
-
-| Endpoint                         | Description               |
-| -------------------------------- | ------------------------- |
-| `GET /api/v1/healthz`            | Liveness                  |
-| `GET /api/v1/readyz`             | Readiness                 |
-| `GET /api/v1/metrics`            | JSON telemetry            |
-| `GET /api/v1/metrics/prometheus` | Prometheus format         |
-| `GET /api/v1/runtime`            | Mode and security posture |
-
-### Grafana dashboard embed
-
-If you have Grafana available, the frontend can render live panel embeds on
-Overview and Diagnostics.
-
-```bash
-VITE_GRAFANA_URL=https://grafana.example.com
-VITE_GRAFANA_DASHBOARD_UID=swarmlens-main
-VITE_GRAFANA_ORG_ID=1
-VITE_GRAFANA_THEME=dark
-VITE_GRAFANA_REFRESH=30s
-```
-
----
-
-## Docker
-
-```bash
-npm run docker:up    # builds and starts swarmlens + predictor
-npm run docker:down
-npm run docker:logs
-```
-
----
-
-## Development
-
-```bash
-npm run lint          # ESLint + Prettier
-npm run test:go       # Go tests (race detector)
-npm run test:web      # Vitest frontend tests
-npm run test:predictor # Pytest scorer tests
-npm run test:e2e      # Playwright (requires dev server)
-npm run ci:backend    # go fmt + go vet + go test -race
-```
-
----
-
-## Directory structure
-
-```
+```text
 backend/
-  cmd/swarmlens/         Entry point
+  cmd/swarmlens/            Go entrypoint
   internal/
-    config/              Env loading + validation
-    model/               Canonical Swarm types
-    docker/              Docker Engine API client + demo fixtures
-    state/               Snapshot cache
-    intelligence/        Diagnostic engine + 9 plugins
-    auth/                Token auth + write gate
-    httpapi/             Router, middleware, all handlers
-    inventory/           (Phase 1) Live Docker API adapters
-    actions/             (Phase 2) Write action implementations
-    audit/               Audit log
-    incident/            Incident lifecycle
-    predictor/           Predictor client with fallback
-    stream/              SSE event bus
+    audit/                  Audit store
+    auth/                   Auth and write gate
+    config/                 Environment config and validation
+    docker/                 Docker API client + demo fixtures
+    httpapi/                Router, middleware, handlers
+    incident/               Incident store
+    intelligence/           Deterministic diagnostics + plugins
+    model/                  Canonical API/domain types
+    predictor/              Predictor client with fallback
+    state/                  Snapshot + telemetry cache
+    stream/                 SSE bus
 predictor/
-  app/                   FastAPI service (main, models, scorer)
+  app/                      FastAPI predictor service
 src/
-  views/                 One folder per route (11 views)
-  components/            layout/ + ui/
-  store/                 Zustand stores
-  hooks/                 useEventStream, useWriteGate
-  lib/                   api.ts, utils.ts
-  types/                 index.ts (mirrors internal/model/types.go)
-deploy/
-  overlays/              dev / demo / prod Swarm stack files
-docs/                    PRODUCT_SPEC, ARCHITECTURE, API, SECURITY, IMPLEMENTATION_PROGRAM
+  components/               Layout, charts, UI
+  hooks/                    Event stream and helpers
+  lib/                      API client, grafana, telemetry, mocks
+  store/                    Zustand domain stores
+  types/                    Frontend mirrors backend model types
+docs/
+  API.md
+  ARCHITECTURE.md
+  CONFIGURATION.md
+  CI_CD.md
+  DEMO_MODE.md
+  PRODUCTION.md
+  SECURITY.md
 ```
 
----
+## Documentation index
 
-## Comparison
-
-| Capability                       | SwarmLens | Portainer | Swarmpit |
-| -------------------------------- | --------- | --------- | -------- |
-| Deterministic diagnostics        | ✅        | ❌        | ❌       |
-| Evidence-based failure analysis  | ✅        | ❌        | ❌       |
-| Incident + runbook workflow      | ✅        | ❌        | ❌       |
-| Audit trail with spec snapshots  | ✅        | Partial   | ❌       |
-| Four-eyes approval for risky ops | ✅        | ❌        | ❌       |
-| Write gate (safe by default)     | ✅        | ❌        | ❌       |
-| Real-time SSE event stream       | ✅        | Partial   | Partial  |
-| Optional AI assistant            | ✅        | ❌        | ❌       |
-
----
-
-## Documentation
-
-- [docs/PRODUCT_SPEC.md](docs/PRODUCT_SPEC.md) — entities, views, actions, safety model, API contract
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — system topology and data flow
-- [docs/API.md](docs/API.md) — endpoint reference
-- [docs/SECURITY.md](docs/SECURITY.md) — controls and hardening checklist
-- [docs/IMPLEMENTATION_PROGRAM.md](docs/IMPLEMENTATION_PROGRAM.md) — phased roadmap with quality gates
-- [CONTRIBUTING.md](CONTRIBUTING.md) — setup, conventions, and plugin development guide
-- [CHANGELOG.md](CHANGELOG.md) — version history
+- [docs/API.md](docs/API.md) - REST and SSE contracts
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) - system design and data flow
+- [docs/CONFIGURATION.md](docs/CONFIGURATION.md) - all environment variables
+- [docs/CI_CD.md](docs/CI_CD.md) - CI and release pipelines
+- [docs/DEMO_MODE.md](docs/DEMO_MODE.md) - demo datasets and scenarios
+- [docs/PRODUCTION.md](docs/PRODUCTION.md) - VPS deployment and rollback
+- [docs/SECURITY.md](docs/SECURITY.md) - controls and hardening checklist
+- [CONTRIBUTING.md](CONTRIBUTING.md) - contribution workflow
+- [CHANGELOG.md](CHANGELOG.md) - notable changes

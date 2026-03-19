@@ -1,64 +1,102 @@
-# Contributing
+﻿# Contributing
 
-## Setup
+Thanks for contributing to SwarmLens.
+
+## Prerequisites
+
+- Node.js 22+
+- Go 1.25+
+- Python 3.12+
+- Docker + Docker Compose v2
+
+## Local setup
 
 ```bash
-git clone https://github.com/AnouarMohamed/swarmlens
-cd swarmlens
+git clone https://github.com/AnouarMohamed/SwarmLens.git
+cd SwarmLens
 cp .env.example .env
 npm install
-npm run dev          # starts both backend (port 8080) and frontend (port 5173)
+npm run dev
 ```
 
-Runs in `demo` mode — no Swarm required.
+Default mode is `demo` and does not require a live Swarm cluster.
 
-## Project layout
+## Development workflow
 
-```
-backend/cmd/swarmlens/   Entry point
-backend/internal/        All Go packages (one responsibility per package)
-src/views/               One folder per route
-src/components/          Shared layout + UI components
-src/store/               Zustand stores (one per domain)
-predictor/app/           FastAPI predictor service
-```
+1. Create a branch (`feature/*`, `fix/*`, `docs/*`, `chore/*`).
+2. Implement changes with tests.
+3. Update docs when behavior/contracts/config change.
+4. Run local CI parity commands.
+5. Open PR to `main`.
 
-## Branch and commit conventions
-
-- Branch: `feature/<slug>`, `fix/<slug>`, `docs/<slug>`
-- Commits: `feat:`, `fix:`, `docs:`, `test:`, `chore:`, `refactor:`
-- Every PR must pass CI (lint + tests + Docker build)
-
-## Backend rules
-
-- All packages live under `backend/internal/`
-- No flat Go files in `backend/` root except `go.mod`/`go.sum`
-- One package per responsibility — no mega-packages
-- Every new env variable must be added to `.env.example` and `internal/config/config.go`
-- Every mutating handler must write an audit record via `d.auditLog.Record(...)`
-- Demo mode must always work with no external dependencies
-
-## Frontend rules
-
-- `src/types/index.ts` must mirror `backend/internal/model/types.go` — keep in sync manually
-- One folder per route under `src/views/`
-- Shared components go in `src/components/ui/` or `src/components/layout/`
-- State lives in `src/store/` — one store per domain, no prop drilling
-- No `any` types — TypeScript strict mode is enforced
-
-## Tests
+## Local validation
 
 ```bash
-npm run test:go         # Go unit tests with race detector
-npm run test:web        # Vitest frontend unit tests
-npm run test:predictor  # Pytest for predictor scorer
-npm run test:e2e        # Playwright e2e (requires dev server running)
+cd backend && go test ./...
+cd ../predictor && python -m pytest -q
+cd .. && npm run lint:ci
+npm run typecheck
+npm run test:web -- --passWithNoTests
+npm run build
 ```
 
-## Adding a diagnostic plugin
+Optional full Docker validation:
 
-1. Create `backend/internal/intelligence/plugins/<name>.go`
-2. Implement the `intelligence.Plugin` interface (`Name() string`, `Analyze(model.Snapshot) []model.Finding`)
-3. Register in `backend/internal/intelligence/plugins/register.go`
-4. Add fixture data to `backend/internal/docker/demo.go` that triggers the plugin
-5. Add the plugin name to `docs/PRODUCT_SPEC.md`
+```bash
+docker build -t swarmlens:ci .
+docker build -t swarmlens-predictor:ci predictor/
+```
+
+## Coding rules
+
+### Backend
+
+- Keep packages under `backend/internal` focused by responsibility.
+- Add new env vars to:
+  - `.env.example`
+  - `backend/internal/config/config.go`
+  - `docs/CONFIGURATION.md`
+- For action-related changes, preserve `ActionOutcome` structure and audit linkage.
+
+### Frontend
+
+- Keep `src/types/index.ts` aligned with `backend/internal/model/types.go`.
+- Use store-driven state (`src/store/*`) for shared domain data.
+- Keep operational UI states explicit: `live`, `stale`, `disconnected`.
+
+### Predictor
+
+- Keep `/score` request/response contract backward compatible.
+- Keep shared-secret behavior stable (`X-Shared-Secret`).
+
+## Documentation requirements
+
+When behavior changes, update relevant docs in the same PR:
+
+- `README.md`
+- `docs/API.md`
+- `docs/CONFIGURATION.md`
+- `docs/SECURITY.md`
+- `docs/PRODUCTION.md`
+- `docs/CI_CD.md`
+- `docs/DEMO_MODE.md` (if demo flows change)
+
+## Commit message style
+
+Use conventional prefixes:
+
+- `feat:`
+- `fix:`
+- `docs:`
+- `test:`
+- `chore:`
+- `refactor:`
+- `ops:`
+
+## Pull request checklist
+
+- [ ] Tests and checks pass locally
+- [ ] API/schema changes reflected in docs
+- [ ] Env variable changes documented
+- [ ] Security-sensitive changes reviewed
+- [ ] No unrelated formatting noise

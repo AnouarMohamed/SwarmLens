@@ -1,0 +1,620 @@
+﻿openapi: 3.0.3
+info:
+  title: SwarmLens API
+  version: 0.1.0
+  description: |
+    Operational API for SwarmLens.
+    Most JSON responses are wrapped in { data: ... } or { data: [...], meta: { total } }.
+servers:
+  - url: /api/v1
+tags:
+  - name: Observability
+  - name: Ops
+  - name: Inventory
+  - name: Diagnostics
+  - name: Incidents
+  - name: Audit
+  - name: Assistant
+  - name: Actions
+paths:
+  /healthz:
+    get:
+      tags: [Observability]
+      summary: Liveness probe
+      responses:
+        '200':
+          description: OK
+  /readyz:
+    get:
+      tags: [Observability]
+      summary: Readiness probe
+      responses:
+        '200':
+          description: Ready
+  /metrics:
+    get:
+      tags: [Observability]
+      summary: Runtime JSON metrics
+      responses:
+        '200':
+          description: Runtime metrics
+  /metrics/prometheus:
+    get:
+      tags: [Observability]
+      summary: Prometheus exposition
+      responses:
+        '200':
+          description: Prometheus text payload
+  /runtime:
+    get:
+      tags: [Observability]
+      summary: Runtime posture
+      responses:
+        '200':
+          description: Mode, auth, write gate, freshness state
+  /ops/metrics:
+    get:
+      tags: [Ops]
+      summary: Timeseries operational metrics
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Ops metrics payload
+  /ops/insights:
+    get:
+      tags: [Ops]
+      summary: Hybrid ops insights
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Insight payload with actions and hypotheses
+  /swarm:
+    get:
+      tags: [Inventory]
+      summary: Cluster posture
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: SwarmInfo envelope
+  /nodes:
+    get:
+      tags: [Inventory]
+      summary: List nodes
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Node list envelope
+  /nodes/{id}:
+    get:
+      tags: [Inventory]
+      summary: Get node
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Node envelope
+        '404':
+          description: Not found
+  /nodes/{id}/drain:
+    post:
+      tags: [Actions]
+      summary: Drain node
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ActionOutcome envelope
+  /nodes/{id}/activate:
+    post:
+      tags: [Actions]
+      summary: Activate node
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ActionOutcome envelope
+  /stacks:
+    get:
+      tags: [Inventory]
+      summary: List stacks
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Stack list envelope
+  /stacks/{name}:
+    get:
+      tags: [Inventory]
+      summary: Get stack
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Stack envelope
+    delete:
+      tags: [Actions]
+      summary: Remove stack
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ActionOutcome envelope
+  /stacks/{name}/deploy:
+    post:
+      tags: [Actions]
+      summary: Deploy stack
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: ActionOutcome envelope
+  /services:
+    get:
+      tags: [Inventory]
+      summary: List services
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: stack
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Service list envelope
+  /services/{id}:
+    get:
+      tags: [Inventory]
+      summary: Get service
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Service envelope
+  /services/{id}/scale:
+    post:
+      tags: [Actions]
+      summary: Scale service
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [replicas]
+              properties:
+                replicas:
+                  type: integer
+                  minimum: 0
+      responses:
+        '200':
+          description: ActionOutcome envelope
+  /services/{id}/restart:
+    post:
+      tags: [Actions]
+      summary: Restart service
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ActionOutcome envelope
+  /services/{id}/update:
+    post:
+      tags: [Actions]
+      summary: Update service spec
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: ActionOutcome envelope
+  /services/{id}/rollback:
+    post:
+      tags: [Actions]
+      summary: Rollback service
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ActionOutcome envelope
+  /tasks:
+    get:
+      tags: [Inventory]
+      summary: List tasks
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: service
+          schema:
+            type: string
+        - in: query
+          name: node
+          schema:
+            type: string
+        - in: query
+          name: state
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Task list envelope
+  /tasks/{id}:
+    get:
+      tags: [Inventory]
+      summary: Get task
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Task envelope
+  /tasks/{id}/restart:
+    post:
+      tags: [Actions]
+      summary: Restart task
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ActionOutcome envelope
+  /networks:
+    get:
+      tags: [Inventory]
+      summary: List networks
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Network list envelope
+  /volumes:
+    get:
+      tags: [Inventory]
+      summary: List volumes
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Volume list envelope
+  /secrets:
+    get:
+      tags: [Inventory]
+      summary: List secrets metadata
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Secret list envelope
+  /configs:
+    get:
+      tags: [Inventory]
+      summary: List config metadata
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Config list envelope
+  /events:
+    get:
+      tags: [Inventory]
+      summary: List recent swarm events
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: type
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Event list envelope
+  /stream/events:
+    get:
+      tags: [Inventory]
+      summary: Stream swarm events via SSE
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: text/event-stream
+  /diagnostics:
+    get:
+      tags: [Diagnostics]
+      summary: List findings
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: severity
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Finding list envelope
+  /diagnostics/run:
+    post:
+      tags: [Diagnostics]
+      summary: Trigger diagnostics run
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Finding list envelope
+  /diagnostics/{id}:
+    get:
+      tags: [Diagnostics]
+      summary: Get finding by ID
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Finding envelope
+        '404':
+          description: Not found
+  /incidents:
+    get:
+      tags: [Incidents]
+      summary: List incidents
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Incident list envelope
+    post:
+      tags: [Incidents]
+      summary: Create incident
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title]
+              properties:
+                title:
+                  type: string
+                description:
+                  type: string
+                severity:
+                  type: string
+                affectedServices:
+                  type: array
+                  items:
+                    type: string
+                diagnosticRefs:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        '201':
+          description: Incident envelope
+  /incidents/{id}:
+    get:
+      tags: [Incidents]
+      summary: Get incident
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Incident envelope
+    put:
+      tags: [Incidents]
+      summary: Update incident status
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                note:
+                  type: string
+      responses:
+        '200':
+          description: Incident envelope
+  /incidents/{id}/resolve:
+    post:
+      tags: [Incidents]
+      summary: Resolve incident
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Incident envelope
+  /audit:
+    get:
+      tags: [Audit]
+      summary: List audit entries
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            minimum: 0
+      responses:
+        '200':
+          description: Audit list envelope
+  /assistant/chat:
+    post:
+      tags: [Assistant]
+      summary: Stream assistant response over SSE
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                prompt:
+                  type: string
+      responses:
+        '200':
+          description: text/event-stream
+  /actions/execute:
+    post:
+      tags: [Actions]
+      summary: Execute read-only action or generate mutation plan
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action:
+                  type: string
+                resource:
+                  type: string
+                resourceID:
+                  type: string
+                params:
+                  type: object
+                  additionalProperties: true
+      responses:
+        '200':
+          description: ActionOutcome envelope
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque-token

@@ -1,31 +1,37 @@
-# Changelog
+﻿# Changelog
 
-All notable changes to SwarmLens are documented here.
+All notable changes to this project are documented in this file.
+
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
-
----
 
 ## [Unreleased]
 
 ### Added
-- Initial project scaffold — Phase 0 complete
-- `backend/internal/config` — env loading with prod safety validation
-- `backend/internal/model` — canonical Swarm types (Node, Service, Task, Finding, Incident, AuditEntry, Snapshot)
-- `backend/internal/docker` — Docker Engine API client factory (socket + TCP/TLS) and demo fixture snapshot
-- `backend/internal/state` — thread-safe snapshot cache
-- `backend/internal/intelligence` — deterministic diagnostic engine with 9 plugins:
-  replica-mismatch, placement-failure, crash-loop, image-pull-failure, port-conflict,
-  secret-config-ref, quorum-risk, update-rollback-state, node-pressure
-- `backend/internal/auth` — static token extraction and role checking, write gate
-- `backend/internal/stream` — in-process SSE event bus
-- `backend/internal/audit` — append-only in-memory audit log
-- `backend/internal/incident` — incident lifecycle (create, update, resolve)
-- `backend/internal/predictor` — optional predictor client with local deterministic fallback
-- `backend/internal/httpapi` — full HTTP router, middleware stack, all handlers
-- `src/` — React + Vite frontend with 11 views, Zustand stores, typed API client
-- `predictor/` — FastAPI risk scoring service with deterministic scorer
-- `deploy/overlays/` — dev, demo, prod Swarm stack files
-- `Dockerfile` — multi-stage Go + Vite + Alpine final image
-- `docker-compose.yml` — local dev compose
-- `.github/workflows/` — CI (lint + test + build) and release (GHCR push on tag)
-- `docs/` — PRODUCT_SPEC, ARCHITECTURE, FEATURES (placeholder), API, SECURITY, IMPLEMENTATION_PROGRAM
+
+- Industrial dark redesign for shell, sidebar, top header, and Overview experience.
+- Rich Overview modules: KPI narrative, findings, events, posture, guidance, and quick actions.
+- Native ECharts telemetry modules plus optional Grafana embed mode.
+- Demo scenario presets: `healthy`, `degraded`, `incident-burst`, `recovery`, `disconnected`.
+- Operational intelligence endpoints:
+  - `GET /api/v1/ops/metrics`
+  - `GET /api/v1/ops/insights`
+- Action orchestrator endpoint: `POST /api/v1/actions/execute` with structured `ActionOutcome`.
+- Assistant streaming endpoint: `POST /api/v1/assistant/chat` with SSE event stream.
+- Predictor contract alignment to `POST /score`.
+- Production deployment scripts:
+  - `scripts/preflight-prod.sh`
+  - `scripts/deploy.sh`
+  - `scripts/rollback.sh`
+
+### Changed
+
+- Backend and predictor now support file-based secrets (`*_FILE`) for production-safe secret injection.
+- CI pipeline gates backend, frontend, predictor, and Docker smoke builds.
+- Main Docker build uses Go 1.25 to match backend toolchain requirements.
+- Frontend test script updated to avoid duplicate `--passWithNoTests` conflicts.
+
+### Fixed
+
+- Predictor Docker user creation is now non-interactive and deterministic.
+- Production overlay now wires predictor base URL and secret-file envs correctly.
+- Documentation set updated and expanded for API, architecture, config, demo mode, CI/CD, security, and production ops.
