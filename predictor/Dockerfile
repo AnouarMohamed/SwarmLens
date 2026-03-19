@@ -2,8 +2,8 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-RUN addgroup --gid 1001 predictor && \
-    adduser --uid 1001 --gid 1001 --disabled-password --no-create-home predictor
+RUN groupadd --gid 1001 predictor && \
+    useradd --uid 1001 --gid 1001 --no-create-home --shell /usr/sbin/nologin predictor
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt

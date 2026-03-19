@@ -12,12 +12,15 @@ services:
       DOCKER_HOST:           unix:///var/run/docker.sock
       AUTH_ENABLED:          ${AUTH_ENABLED:-false}
       AUTH_TOKENS:           ${AUTH_TOKENS:-}
+      AUTH_TOKENS_FILE:      ${AUTH_TOKENS_FILE:-}
       WRITE_ACTIONS_ENABLED: ${WRITE_ACTIONS_ENABLED:-false}
       PREDICTOR_BASE_URL:    http://predictor:8001
       PREDICTOR_SHARED_SECRET: ${PREDICTOR_SHARED_SECRET:-dev-secret}
+      PREDICTOR_SHARED_SECRET_FILE: ${PREDICTOR_SHARED_SECRET_FILE:-}
       ASSISTANT_PROVIDER:    ${ASSISTANT_PROVIDER:-none}
       ASSISTANT_API_BASE_URL: ${ASSISTANT_API_BASE_URL:-}
       ASSISTANT_API_KEY:     ${ASSISTANT_API_KEY:-}
+      ASSISTANT_API_KEY_FILE: ${ASSISTANT_API_KEY_FILE:-}
       ASSISTANT_MODEL:       ${ASSISTANT_MODEL:-}
     depends_on:
       predictor:
@@ -37,6 +40,7 @@ services:
       - "8001:8001"
     environment:
       PREDICTOR_SHARED_SECRET: ${PREDICTOR_SHARED_SECRET:-dev-secret}
+      PREDICTOR_SHARED_SECRET_FILE: ${PREDICTOR_SHARED_SECRET_FILE:-}
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8001/health"]

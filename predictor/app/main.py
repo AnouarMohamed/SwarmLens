@@ -8,7 +8,22 @@ from .scorer import score_snapshot
 
 app = FastAPI(title="SwarmLens Predictor", version="0.1.0")
 
-SHARED_SECRET = os.environ.get("PREDICTOR_SHARED_SECRET", "")
+
+def _read_secret(name: str) -> str:
+    direct = os.environ.get(name, "").strip()
+    if direct:
+        return direct
+    path = os.environ.get(f"{name}_FILE", "").strip()
+    if not path:
+        return ""
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            return fh.read().strip()
+    except OSError:
+        return ""
+
+
+SHARED_SECRET = _read_secret("PREDICTOR_SHARED_SECRET")
 
 
 def _check_secret(x_shared_secret: str | None) -> None:

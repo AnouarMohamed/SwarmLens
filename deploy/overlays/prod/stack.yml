@@ -34,10 +34,13 @@ services:
     environment:
       APP_MODE: prod
       AUTH_ENABLED: "true"
+      AUTH_TOKENS_FILE: /run/secrets/swarmlens_auth_tokens
       WRITE_ACTIONS_ENABLED: "false"
       WRITE_APPROVAL_REQUIRED: "true"
       RATE_LIMIT_ENABLED: "true"
       DIAGNOSTICS_SCHEDULE: "60"
+      PREDICTOR_BASE_URL: http://predictor:8001
+      PREDICTOR_SHARED_SECRET_FILE: /run/secrets/swarmlens_predictor_secret
     secrets:
       - swarmlens_auth_tokens
       - swarmlens_predictor_secret

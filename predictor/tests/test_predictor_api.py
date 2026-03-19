@@ -60,3 +60,12 @@ def test_score_endpoint_enforces_shared_secret(monkeypatch):
         headers={"x-shared-secret": "top-secret"},
     )
     assert allowed.status_code == 200
+
+
+def test_read_secret_uses_file(tmp_path, monkeypatch):
+    secret_file = tmp_path / "predictor_secret"
+    secret_file.write_text("file-secret\n", encoding="utf-8")
+    monkeypatch.delenv("PREDICTOR_SHARED_SECRET", raising=False)
+    monkeypatch.setenv("PREDICTOR_SHARED_SECRET_FILE", str(secret_file))
+
+    assert main_module._read_secret("PREDICTOR_SHARED_SECRET") == "file-secret"

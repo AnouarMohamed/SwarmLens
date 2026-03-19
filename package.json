@@ -13,7 +13,7 @@
     "lint:ci": "eslint src && prettier --check \".github/workflows/*.{yml,yaml}\" package.json tsconfig.json vite.config.ts",
     "lint:fix": "eslint . --fix && prettier --write .",
     "typecheck": "tsc --noEmit",
-    "test:web": "vitest run --passWithNoTests --exclude e2e/**",
+    "test:web": "vitest run --exclude e2e/**",
     "test:go": "cd backend && go test -race ./...",
     "test:predictor": "cd predictor && python -m pytest",
     "test:e2e": "playwright test",

@@ -64,6 +64,32 @@ docker stack deploy -c deploy/overlays/prod/stack.yml swarmlens
 
 ---
 
+## Production automation (VPS)
+
+Use the production env template and rollout scripts:
+
+```bash
+cp deploy/env/prod.env.example .env
+chmod 600 .env
+./scripts/preflight-prod.sh
+./scripts/deploy.sh
+```
+
+Rollback:
+
+```bash
+./scripts/rollback.sh
+# or
+ROLLBACK_TO=<sha-or-tag> ./scripts/rollback.sh
+```
+
+Use `_FILE` secrets in production where possible:
+`AUTH_TOKENS_FILE`, `PREDICTOR_SHARED_SECRET_FILE`, `ASSISTANT_API_KEY_FILE`.
+
+Full guide: [docs/PRODUCTION.md](docs/PRODUCTION.md)
+
+---
+
 ## Diagnostic plugins
 
 | Plugin                  | Detects                                                 |

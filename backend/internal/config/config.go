@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 )
@@ -52,7 +53,7 @@ func Load() (Config, error) {
 		DockerTLSVerify:       envBool("DOCKER_TLS_VERIFY", false),
 		DockerCertPath:        env("DOCKER_CERT_PATH", ""),
 		AuthEnabled:           envBool("AUTH_ENABLED", false),
-		AuthTokens:            env("AUTH_TOKENS", ""),
+		AuthTokens:            envOrFile("AUTH_TOKENS", ""),
 		AuthProvider:          env("AUTH_PROVIDER", ""),
 		OIDCIssuerURL:         env("AUTH_OIDC_ISSUER_URL", ""),
 		OIDCClientID:          env("AUTH_OIDC_CLIENT_ID", ""),
@@ -63,12 +64,12 @@ func Load() (Config, error) {
 		WriteApprovalRequired: envBool("WRITE_APPROVAL_REQUIRED", true),
 		DiagnosticsSchedule:   envInt("DIAGNOSTICS_SCHEDULE", 60),
 		PredictorBaseURL:      env("PREDICTOR_BASE_URL", ""),
-		PredictorSecret:       env("PREDICTOR_SHARED_SECRET", ""),
+		PredictorSecret:       envOrFile("PREDICTOR_SHARED_SECRET", ""),
 		LiveActionPolicy:      env("LIVE_ACTION_POLICY", "read_only_dry_run"),
 		SnapshotStaleSeconds:  envInt("SNAPSHOT_STALE_SECONDS", 45),
 		AssistantProvider:     env("ASSISTANT_PROVIDER", "none"),
 		AssistantBaseURL:      env("ASSISTANT_API_BASE_URL", ""),
-		AssistantAPIKey:       env("ASSISTANT_API_KEY", ""),
+		AssistantAPIKey:       envOrFile("ASSISTANT_API_KEY", ""),
 		AssistantModel:        env("ASSISTANT_MODEL", ""),
 		AssistantRAGEnabled:   envBool("ASSISTANT_RAG_ENABLED", true),
 		RateLimitEnabled:      envBool("RATE_LIMIT_ENABLED", true),
@@ -161,4 +162,24 @@ func envInt(key string, fallback int) int {
 		return fallback
 	}
 	return i
+}
+
+func envOrFile(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	fileKey := key + "_FILE"
+	path := strings.TrimSpace(os.Getenv(fileKey))
+	if path == "" {
+		return fallback
+	}
+	content, err := os.ReadFile(filepath.Clean(path))
+	if err != nil {
+		return fallback
+	}
+	value := strings.TrimSpace(string(content))
+	if value == "" {
+		return fallback
+	}
+	return value
 }
