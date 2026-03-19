@@ -59,7 +59,7 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
       - name: Unit tests
-        run: npm run test:web -- --passWithNoTests
+        run: npm run test:web
       - name: Build
         run: npm run build
 
