@@ -1,110 +1,161 @@
+﻿
 import { useEffect, useMemo, useRef } from 'react'
+import type { ComponentType, SVGProps } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { GrafanaEmbed } from '../../components/charts/GrafanaEmbed'
-import { relativeTime } from '../../lib/utils'
-import { grafanaConfig } from '../../lib/grafana'
-import { buildOverviewTelemetry } from '../../lib/telemetry'
-import { useClusterStore } from '../../store/clusterStore'
-import { useDiagnosticsStore } from '../../store/diagnosticsStore'
-import { useIncidentStore } from '../../store/incidentStore'
 import {
   GrafanaAreaSeries,
   GrafanaBarSeries,
   GrafanaTimeSeries,
 } from '../../components/charts/GrafanaCharts'
+import { grafanaConfig } from '../../lib/grafana'
+import { buildOverviewTelemetry } from '../../lib/telemetry'
+import { relativeTime } from '../../lib/utils'
+import { useClusterStore } from '../../store/clusterStore'
+import { useDiagnosticsStore } from '../../store/diagnosticsStore'
+import { useIncidentStore } from '../../store/incidentStore'
 import type { Severity, SwarmEvent } from '../../types'
 import {
+  ActivityIcon,
+  AlertIcon,
   ArrowRightIcon,
   CheckCircleIcon,
-  ClockIcon,
   DiagnosticsIcon,
   DisconnectIcon,
   RefreshIcon,
+  ServerIcon,
+  ShieldIcon,
   WarningIcon,
 } from '../../components/ui/icons'
 
-type Tone = 'stable' | 'critical' | 'unknown'
+type Tone = 'primary' | 'attention' | 'muted'
 type Scenario = 'healthy' | 'degraded' | 'disconnected'
+type IconComponent = ComponentType<SVGProps<SVGSVGElement>>
 
-type Model = {
+interface Metric {
+  id: string
+  label: string
+  value: string
+  supporting: string
+  note: string
+  to: string
+  tone: Tone
+  icon: IconComponent
+  unknown?: boolean
+}
+
+interface Check {
+  id: string
+  label: string
+  detail: string
+  status: string
+  tone: Tone
+}
+
+interface FindingRow {
+  id: string
+  title: string
+  object: string
+  timestamp: string
+  tone: Tone
+  to: string
+}
+
+interface EventRow {
+  id: string
+  title: string
+  source: string
+  timestamp: string
+  metadata?: string
+  tone: Tone
+}
+
+interface AttentionRow {
+  id: string
+  name: string
+  replicas: string
+  state: string
+  issue: string
+}
+
+interface PostureRow {
+  id: string
+  label: string
+  value: string
+  tone: Tone
+}
+
+interface OverviewModel {
   disconnected: boolean
+  stale: boolean
   clusterName: string
   environment: string
   endpoint: string
   healthLabel: 'Healthy' | 'Degraded' | 'Unknown'
-  healthTone: Tone
   summary: string
   freshness: string
-  staleNote: string
-  metrics: Array<{
-    id: string
-    label: string
-    value: string
-    detail: string
-    note: string
-    tone: Tone
-    to: string
-  }>
-  checks: Array<{ id: string; label: string; detail: string; state: string; tone: Tone }>
-  findings: Array<{
-    id: string
-    title: string
-    object: string
-    timestamp: string
-    tone: Tone
-    to: string
-  }>
-  events: Array<{
-    id: string
-    title: string
-    source: string
-    timestamp: string
-    metadata?: string
-    tone: Tone
-  }>
-  attention: Array<{ id: string; name: string; replicas: string; state: string; issue: string }>
+  metrics: Metric[]
+  checks: Check[]
+  findings: FindingRow[]
+  events: EventRow[]
+  attention: AttentionRow[]
   diagnostics: {
     status: string
     lastRun: number | null
     durationMs: number | null
     findingsCount: number
   }
-  posture: Array<{ id: string; label: string; value: string; tone: Tone }>
-  guidance: { title: string; description: string; steps: string[] }
+  posture: PostureRow[]
+  guidance: {
+    title: string
+    description: string
+    steps: string[]
+  }
+  telemetrySeed: {
+    runningTasks: number
+    failedTasks: number
+    managersOnline: number
+    workersOnline: number
+    criticalFindings: number
+    warningFindings: number
+    degraded: boolean
+  }
 }
 
-const minutesAgo = (m: number) => new Date(Date.now() - m * 60000).toISOString()
+const PENDING_TASK_STATES = new Set(['new', 'pending', 'assigned', 'accepted', 'preparing', 'starting'])
 
 function cn(...parts: Array<string | false | undefined>) {
   return parts.filter(Boolean).join(' ')
 }
 
 function toneClass(tone: Tone) {
-  if (tone === 'critical') return 'text-state-danger'
-  if (tone === 'unknown') return 'text-text-secondary'
+  if (tone === 'attention') return 'text-state-danger'
+  if (tone === 'muted') return 'text-text-secondary'
   return 'text-text-primary'
 }
 
 function toneIcon(tone: Tone) {
-  if (tone === 'critical') return <WarningIcon className="h-4 w-4 text-state-danger" />
-  if (tone === 'unknown') return <DisconnectIcon className="h-4 w-4 text-text-secondary" />
+  if (tone === 'attention') return <WarningIcon className="h-4 w-4 text-state-danger" />
+  if (tone === 'muted') return <DisconnectIcon className="h-4 w-4 text-text-secondary" />
   return <CheckCircleIcon className="h-4 w-4 text-text-secondary" />
 }
 
 function toneFromSeverity(severity: Severity): Tone {
-  return severity === 'critical' || severity === 'high' || severity === 'medium'
-    ? 'critical'
-    : 'stable'
+  return severity === 'critical' || severity === 'high' || severity === 'medium' ? 'attention' : 'primary'
 }
 
 function toneFromEvent(evt: SwarmEvent): Tone {
-  const t = `${evt.action} ${evt.message}`.toLowerCase()
-  return /(failed|error|reject|down|unreachable|timeout|panic)/.test(t) ? 'critical' : 'stable'
+  const payload = `${evt.action} ${evt.message}`.toLowerCase()
+  return /(failed|error|reject|down|unreachable|timeout|panic)/.test(payload) ? 'attention' : 'primary'
 }
 
 function durationLabel(ms: number | null) {
   if (!ms) return 'n/a'
   return ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`
+}
+
+function delta(v: number) {
+  return v > 0 ? `+${v}` : `${v}`
 }
 
 function clock(ts: string) {
@@ -115,107 +166,148 @@ function clock(ts: string) {
   })
 }
 
-function delta(v: number) {
-  return v > 0 ? `+${v}` : `${v}`
-}
+function scenarioModel(kind: Scenario, endpoint: string): OverviewModel {
+  const baseChecks: Check[] = [
+    {
+      id: 'c1',
+      label: 'Control plane reachable',
+      detail: kind === 'disconnected' ? 'Manager endpoint unreachable.' : 'Manager API responding.',
+      status: kind === 'disconnected' ? 'Unknown' : kind === 'degraded' ? 'Watch' : 'Nominal',
+      tone: kind === 'disconnected' ? 'muted' : kind === 'degraded' ? 'attention' : 'primary',
+    },
+    {
+      id: 'c2',
+      label: 'Node quorum',
+      detail:
+        kind === 'degraded'
+          ? '2/3 managers reachable.'
+          : kind === 'disconnected'
+            ? 'No live quorum data.'
+            : '3/3 managers reachable.',
+      status: kind === 'degraded' ? 'Degraded' : kind === 'disconnected' ? 'Unknown' : 'Nominal',
+      tone: kind === 'degraded' ? 'attention' : kind === 'disconnected' ? 'muted' : 'primary',
+    },
+    {
+      id: 'c3',
+      label: 'Task scheduling',
+      detail:
+        kind === 'degraded'
+          ? 'Placement failures detected.'
+          : kind === 'disconnected'
+            ? 'Scheduler stream paused.'
+            : 'No pending failures.',
+      status: kind === 'degraded' ? 'Degraded' : kind === 'disconnected' ? 'Unknown' : 'Nominal',
+      tone: kind === 'degraded' ? 'attention' : kind === 'disconnected' ? 'muted' : 'primary',
+    },
+    {
+      id: 'c4',
+      label: 'Replica health',
+      detail:
+        kind === 'degraded'
+          ? 'Replica drift in 2 services.'
+          : kind === 'disconnected'
+            ? 'Replica state unavailable.'
+            : 'All replicas healthy.',
+      status: kind === 'degraded' ? 'Degraded' : kind === 'disconnected' ? 'Unknown' : 'Nominal',
+      tone: kind === 'degraded' ? 'attention' : kind === 'disconnected' ? 'muted' : 'primary',
+    },
+    {
+      id: 'c5',
+      label: 'Network/config health',
+      detail:
+        kind === 'disconnected'
+          ? 'No live network telemetry.'
+          : 'Overlay and config checks nominal.',
+      status: kind === 'disconnected' ? 'Unknown' : 'Nominal',
+      tone: kind === 'disconnected' ? 'muted' : 'primary',
+    },
+  ]
 
-function leadingInt(value: string | undefined, fallback: number) {
-  if (!value) return fallback
-  const match = value.match(/\d+/)
-  if (!match) return fallback
-  const parsed = Number(match[0])
-  return Number.isFinite(parsed) ? parsed : fallback
-}
-
-function scenarioModel(kind: Scenario, endpoint: string): Model {
   if (kind === 'disconnected') {
     return {
       disconnected: true,
+      stale: true,
       clusterName: 'cluster/swrm-prod-eu-01',
       environment: 'PROD',
       endpoint,
       healthLabel: 'Unknown',
-      healthTone: 'unknown',
-      summary: 'SwarmLens is not connected to the cluster. Live telemetry and controls are paused.',
+      summary: 'SwarmLens is not connected. Live telemetry and controls are paused.',
       freshness: 'No successful sync yet',
-      staleNote: 'Showing last known data from previous telemetry snapshot.',
       metrics: [
         {
-          id: 'h',
+          id: 'health',
           label: 'Cluster Health',
           value: 'Unknown',
-          detail: 'Last known: 38/42 healthy',
-          note: 'Telemetry stale',
-          tone: 'unknown',
+          supporting: 'Last known: 38/42 replicas healthy',
+          note: 'Showing last known telemetry',
           to: '/diagnostics',
+          tone: 'attention',
+          icon: ShieldIcon,
         },
         {
-          id: 'n',
+          id: 'nodes',
           label: 'Nodes',
-          value: '8',
-          detail: '3 managers / 5 workers',
-          note: 'Last known snapshot',
-          tone: 'unknown',
+          value: '—',
+          supporting: 'UNKNOWN',
+          note: 'Reconnect to read node state',
           to: '/nodes',
+          tone: 'attention',
+          icon: ServerIcon,
+          unknown: true,
         },
         {
-          id: 't',
+          id: 'tasks',
           label: 'Running Tasks',
-          value: '124',
-          detail: 'Last known: 4 failed',
-          note: 'No live updates',
-          tone: 'unknown',
+          value: '—',
+          supporting: 'UNKNOWN',
+          note: 'Scheduler telemetry paused',
           to: '/tasks',
+          tone: 'attention',
+          icon: ActivityIcon,
+          unknown: true,
         },
         {
-          id: 'f',
+          id: 'findings',
           label: 'Active Findings',
           value: '5',
-          detail: '2 critical / 3 warning',
-          note: 'Reconnect to update',
-          tone: 'unknown',
+          supporting: '2 critical / 3 warning (last known)',
+          note: 'Reconnect to confirm current state',
           to: '/incidents',
+          tone: 'attention',
+          icon: AlertIcon,
         },
       ],
-      checks: [
-        {
-          id: 'c1',
-          label: 'Control plane reachable',
-          detail: 'Connection lost to manager endpoint',
-          state: 'Unknown',
-          tone: 'unknown',
-        },
-        {
-          id: 'c2',
-          label: 'Node quorum',
-          detail: 'Last known: degraded',
-          state: 'Unknown',
-          tone: 'unknown',
-        },
-      ],
+      checks: baseChecks,
       findings: [],
       events: [],
       attention: [],
       diagnostics: {
         status: 'Offline',
-        lastRun: Date.now() - 900000,
+        lastRun: Date.now() - 14 * 60_000,
         durationMs: 1800,
         findingsCount: 5,
       },
       posture: [
-        { id: 'p1', label: 'Managers Online', value: 'unknown', tone: 'unknown' },
-        { id: 'p2', label: 'Workers Online', value: 'unknown', tone: 'unknown' },
-        { id: 'p3', label: 'Total Replicas', value: '42 (last known)', tone: 'unknown' },
+        { id: 'p1', label: 'Managers online', value: 'unknown', tone: 'muted' },
+        { id: 'p2', label: 'Workers online', value: 'unknown', tone: 'muted' },
+        { id: 'p3', label: 'Total replicas', value: '42 (last known)', tone: 'muted' },
+        { id: 'p4', label: 'Pending tasks', value: 'unknown', tone: 'muted' },
+        { id: 'p5', label: 'Unhealthy services', value: 'unknown', tone: 'muted' },
+        { id: 'p6', label: 'Swarm quorum', value: 'unknown', tone: 'muted' },
       ],
       guidance: {
-        title: 'Reconnect Required',
-        description:
-          'Restore connection to continue diagnostics, event stream, and write operations.',
-        steps: [
-          'Check manager reachability.',
-          'Validate endpoint and credentials.',
-          'Reconnect and refresh telemetry.',
-        ],
+        title: 'Reconnect cluster to resume operations',
+        description: 'Live reads and write controls remain paused while disconnected.',
+        steps: ['Validate manager reachability.', 'Check endpoint credentials.', 'Reconnect and refresh telemetry.'],
+      },
+      telemetrySeed: {
+        runningTasks: 124,
+        failedTasks: 4,
+        managersOnline: 2,
+        workersOnline: 4,
+        criticalFindings: 2,
+        warningFindings: 3,
+        degraded: true,
       },
     }
   }
@@ -223,85 +315,64 @@ function scenarioModel(kind: Scenario, endpoint: string): Model {
   if (kind === 'degraded') {
     return {
       disconnected: false,
+      stale: false,
       clusterName: 'cluster/swrm-prod-eu-01',
       environment: 'PROD',
       endpoint,
       healthLabel: 'Degraded',
-      healthTone: 'critical',
-      summary:
-        'Cluster is partially degraded. Replica drift was detected on 2 services and 1 worker is unreachable.',
+      summary: 'Cluster is partially degraded. 2 services have replica drift and 1 worker is unreachable.',
       freshness: 'Last sync 36s ago',
-      staleNote: 'Telemetry is live.',
       metrics: [
         {
-          id: 'h',
+          id: 'health',
           label: 'Cluster Health',
           value: 'Degraded',
-          detail: '38/42 replicas healthy',
+          supporting: '38/42 replicas healthy',
           note: 'Checked 2m ago',
-          tone: 'critical',
           to: '/diagnostics',
+          tone: 'attention',
+          icon: ShieldIcon,
         },
         {
-          id: 'n',
+          id: 'nodes',
           label: 'Nodes',
           value: '8',
-          detail: '3 managers / 5 workers',
+          supporting: '3 managers / 5 workers',
           note: '1 unavailable',
-          tone: 'critical',
           to: '/nodes',
+          tone: 'attention',
+          icon: ServerIcon,
         },
         {
-          id: 't',
+          id: 'tasks',
           label: 'Running Tasks',
           value: '124',
-          detail: '120 healthy / 4 failed',
+          supporting: '120 healthy / 4 failed',
           note: '-3 since last refresh',
-          tone: 'critical',
           to: '/tasks',
+          tone: 'attention',
+          icon: ActivityIcon,
         },
         {
-          id: 'f',
+          id: 'findings',
           label: 'Active Findings',
           value: '5',
-          detail: '2 critical / 3 warning',
-          note: 'Open incidents now',
-          tone: 'critical',
+          supporting: '2 critical / 3 warning',
+          note: 'Review incidents now',
           to: '/incidents',
+          tone: 'attention',
+          icon: AlertIcon,
         },
       ],
-      checks: [
-        {
-          id: 'c1',
-          label: 'Control plane reachable',
-          detail: 'Manager API responding in degraded mode',
-          state: 'Nominal',
-          tone: 'stable',
-        },
-        {
-          id: 'c2',
-          label: 'Node quorum',
-          detail: '2/3 managers reachable',
-          state: 'Degraded',
-          tone: 'critical',
-        },
-      ],
+      checks: baseChecks,
       findings: [
         {
           id: 'f1',
           title: 'Replica shortfall in payments-worker',
           object: 'service/payments-worker',
-          timestamp: minutesAgo(6),
-          tone: 'critical',
+          timestamp: new Date(Date.now() - 6 * 60_000).toISOString(),
+          tone: 'attention',
           to: '/incidents',
-        },
-        {
-          id: 'f2',
-          title: 'Worker node unreachable',
-          object: 'node/worker-02',
-          timestamp: minutesAgo(11),
-          tone: 'critical',
-          to: '/nodes',
         },
       ],
       events: [
@@ -309,17 +380,9 @@ function scenarioModel(kind: Scenario, endpoint: string): Model {
           id: 'e1',
           title: 'Task rejected due to placement constraint',
           source: 'payments-worker',
-          timestamp: minutesAgo(4),
+          timestamp: new Date(Date.now() - 4 * 60_000).toISOString(),
           metadata: 'node.labels.zone=eu-central',
-          tone: 'critical',
-        },
-        {
-          id: 'e2',
-          title: 'Node heartbeat delayed',
-          source: 'worker-02',
-          timestamp: minutesAgo(8),
-          metadata: 'reachability changed to unreachable',
-          tone: 'critical',
+          tone: 'attention',
         },
       ],
       attention: [
@@ -327,135 +390,131 @@ function scenarioModel(kind: Scenario, endpoint: string): Model {
           id: 'a1',
           name: 'payments-worker',
           replicas: '0 / 2',
-          state: 'Replica Drift',
+          state: 'Replica drift',
           issue: '3 placement failures in 10m',
-        },
-        {
-          id: 'a2',
-          name: 'api-gateway',
-          replicas: '5 / 6',
-          state: 'Task Failures',
-          issue: '1 restart in rolling update',
         },
       ],
       diagnostics: {
         status: 'Degraded',
-        lastRun: Date.now() - 120000,
+        lastRun: Date.now() - 2 * 60_000,
         durationMs: 1700,
         findingsCount: 5,
       },
       posture: [
-        { id: 'p1', label: 'Managers Online', value: '2 / 3', tone: 'critical' },
-        { id: 'p2', label: 'Workers Online', value: '4 / 5', tone: 'critical' },
-        { id: 'p3', label: 'Total Replicas', value: '42', tone: 'stable' },
+        { id: 'p1', label: 'Managers online', value: '2 / 3', tone: 'attention' },
+        { id: 'p2', label: 'Workers online', value: '4 / 5', tone: 'attention' },
+        { id: 'p3', label: 'Total replicas', value: '38 / 42', tone: 'attention' },
+        { id: 'p4', label: 'Pending tasks', value: '6', tone: 'attention' },
+        { id: 'p5', label: 'Unhealthy services', value: '2', tone: 'attention' },
+        { id: 'p6', label: 'Swarm quorum', value: 'degraded', tone: 'attention' },
       ],
       guidance: {
-        title: 'Mitigation Sequence',
-        description: 'Recover control-plane quorum first, then clear placement and replica drift.',
-        steps: [
-          'Restore manager reachability.',
-          'Resolve placement constraints.',
-          'Re-run diagnostics and validate findings.',
-        ],
+        title: 'Prioritize quorum and replica recovery',
+        description: 'Recover control-plane stability first, then clear placement failures.',
+        steps: ['Restore manager reachability.', 'Resolve placement constraints.', 'Re-run diagnostics.'],
+      },
+      telemetrySeed: {
+        runningTasks: 124,
+        failedTasks: 4,
+        managersOnline: 2,
+        workersOnline: 4,
+        criticalFindings: 2,
+        warningFindings: 3,
+        degraded: true,
       },
     }
   }
 
   return {
     disconnected: false,
+    stale: false,
     clusterName: 'cluster/swrm-dev-lab-01',
     environment: 'DEMO',
     endpoint,
     healthLabel: 'Healthy',
-    healthTone: 'stable',
-    summary:
-      'Cluster is healthy. No active critical findings. Scheduling and replicas are nominal.',
+    summary: 'Cluster is healthy. No active critical findings. Last diagnostics run 8 minutes ago.',
     freshness: 'Last sync 28s ago',
-    staleNote: 'Telemetry is live.',
     metrics: [
       {
-        id: 'h',
+        id: 'health',
         label: 'Cluster Health',
         value: 'Healthy',
-        detail: '24/24 replicas healthy',
+        supporting: '24/24 replicas healthy',
         note: 'Checked 2m ago',
-        tone: 'stable',
         to: '/diagnostics',
+        tone: 'primary',
+        icon: ShieldIcon,
       },
       {
-        id: 'n',
+        id: 'nodes',
         label: 'Nodes',
         value: '5',
-        detail: '3 managers / 2 workers',
+        supporting: '3 managers / 2 workers',
         note: '0 unavailable',
-        tone: 'stable',
         to: '/nodes',
+        tone: 'primary',
+        icon: ServerIcon,
       },
       {
-        id: 't',
+        id: 'tasks',
         label: 'Running Tasks',
         value: '72',
-        detail: '72 healthy / 0 failed',
+        supporting: '72 healthy / 0 failed',
         note: '+1 since last refresh',
-        tone: 'stable',
         to: '/tasks',
+        tone: 'primary',
+        icon: ActivityIcon,
       },
       {
-        id: 'f',
+        id: 'findings',
         label: 'Active Findings',
         value: '0',
-        detail: 'No critical or warning findings',
+        supporting: 'No critical or warning findings',
         note: 'Diagnostics completed 8m ago',
-        tone: 'stable',
         to: '/incidents',
+        tone: 'primary',
+        icon: AlertIcon,
       },
     ],
-    checks: [
-      {
-        id: 'c1',
-        label: 'Control plane reachable',
-        detail: 'API and manager leadership responsive',
-        state: 'Nominal',
-        tone: 'stable',
-      },
-      {
-        id: 'c2',
-        label: 'Node quorum',
-        detail: '3/3 managers reachable',
-        state: 'Nominal',
-        tone: 'stable',
-      },
-    ],
+    checks: baseChecks,
     findings: [],
     events: [
       {
         id: 'e1',
         title: 'Diagnostics completed with zero findings',
         source: 'diagnostics',
-        timestamp: minutesAgo(8),
-        tone: 'stable',
+        timestamp: new Date(Date.now() - 8 * 60_000).toISOString(),
+        tone: 'primary',
       },
     ],
     attention: [],
     diagnostics: {
       status: 'Clear',
-      lastRun: Date.now() - 480000,
+      lastRun: Date.now() - 8 * 60_000,
       durationMs: 900,
       findingsCount: 0,
     },
     posture: [
-      { id: 'p1', label: 'Managers Online', value: '3 / 3', tone: 'stable' },
-      { id: 'p2', label: 'Workers Online', value: '2 / 2', tone: 'stable' },
-      { id: 'p3', label: 'Total Replicas', value: '24', tone: 'stable' },
+      { id: 'p1', label: 'Managers online', value: '3 / 3', tone: 'primary' },
+      { id: 'p2', label: 'Workers online', value: '2 / 2', tone: 'primary' },
+      { id: 'p3', label: 'Total replicas', value: '24 / 24', tone: 'primary' },
+      { id: 'p4', label: 'Pending tasks', value: '0', tone: 'primary' },
+      { id: 'p5', label: 'Unhealthy services', value: '0', tone: 'primary' },
+      { id: 'p6', label: 'Swarm quorum', value: 'healthy', tone: 'primary' },
     ],
     guidance: {
-      title: 'No Active Workload Issues',
+      title: 'No active workload issues',
       description: 'Telemetry is stable and no mitigation workflow is required right now.',
-      steps: [
-        'Run diagnostics on regular cadence.',
-        'Review audit trail for writes.',
-        'Inspect services before rollouts.',
-      ],
+      steps: ['Run diagnostics on cadence.', 'Review audit trail for writes.', 'Inspect services before rollouts.'],
+    },
+    telemetrySeed: {
+      runningTasks: 72,
+      failedTasks: 0,
+      managersOnline: 3,
+      workersOnline: 2,
+      criticalFindings: 0,
+      warningFindings: 0,
+      degraded: false,
     },
   }
 }
@@ -464,20 +523,53 @@ function OverviewSkeleton() {
   return (
     <div className="animate-pulse">
       <section className="industrial-section">
-        <div className="mx-auto w-full max-w-[1440px] px-4 sm:px-6 lg:px-10">
-          <div className="h-3 w-28 bg-white/10" />
+        <div className="mx-auto w-full max-w-[1600px] px-4 sm:px-6 lg:px-10">
+          <div className="h-3 w-24 bg-white/10" />
           <div className="mt-5 h-20 w-full max-w-3xl bg-white/10" />
         </div>
       </section>
       <section className="industrial-section">
-        <div className="mx-auto w-full max-w-[1440px] px-4 sm:px-6 lg:px-10">
+        <div className="mx-auto w-full max-w-[1600px] px-4 sm:px-6 lg:px-10">
           <div className="grid grid-cols-2 gap-8 xl:grid-cols-4">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="h-20 bg-white/10" />
+            {Array.from({ length: 4 }).map((_, idx) => (
+              <div key={idx} className="h-20 bg-white/10" />
             ))}
           </div>
         </div>
       </section>
+    </div>
+  )
+}
+
+interface SectionHeadingProps {
+  id: string
+  eyebrow: string
+  title: string
+  actionLabel?: string
+  onAction?: () => void
+  actionDisabled?: boolean
+}
+
+function SectionHeading({ id, eyebrow, title, actionLabel, onAction, actionDisabled }: SectionHeadingProps) {
+  return (
+    <div className="flex items-end justify-between gap-6">
+      <div>
+        <p className="industrial-label">{eyebrow}</p>
+        <h3 id={id} className="mt-2 font-heading text-[1.85rem] uppercase leading-none tracking-[0.05em]">
+          {title}
+        </h3>
+      </div>
+      {actionLabel && onAction ? (
+        <button
+          type="button"
+          onClick={onAction}
+          disabled={actionDisabled}
+          className={cn('industrial-action', actionDisabled && 'cursor-not-allowed opacity-35')}
+        >
+          {actionLabel}
+          <ArrowRightIcon className="h-3.5 w-3.5" />
+        </button>
+      ) : null}
     </div>
   )
 }
@@ -491,27 +583,17 @@ export function OverviewView() {
     services,
     tasks,
     events,
+    networks,
+    configs,
     loading,
     error,
     connectionState,
     lastRefresh,
     fetchAll,
   } = useClusterStore()
-  const {
-    findings,
-    fetch: fetchDiagnostics,
-    run,
-    running,
-    lastRun,
-    lastDurationMs,
-    error: diagError,
-  } = useDiagnosticsStore()
-  const {
-    incidents,
-    fetch: fetchIncidents,
-    loading: incidentsLoading,
-    error: incidentsError,
-  } = useIncidentStore()
+  const { findings, fetch: fetchDiagnostics, run, running, lastRun, lastDurationMs, error: findingsError } =
+    useDiagnosticsStore()
+  const { incidents, fetch: fetchIncidents, loading: incidentsLoading } = useIncidentStore()
 
   const prevRunningTasksRef = useRef<number | null>(null)
   const prevRefreshRef = useRef(0)
@@ -521,20 +603,22 @@ export function OverviewView() {
     void fetchIncidents()
   }, [fetchDiagnostics, fetchIncidents])
 
-  const runningTasks = tasks.filter((t) => t.currentState === 'running').length
-  const failedTasks = tasks.filter(
-    (t) => t.currentState === 'failed' || t.currentState === 'rejected',
+  const liveRunningTasks = tasks.filter((task) => task.currentState === 'running').length
+  const liveFailedTasks = tasks.filter(
+    (task) => task.currentState === 'failed' || task.currentState === 'rejected',
   ).length
 
   useEffect(() => {
     if (lastRefresh && lastRefresh !== prevRefreshRef.current) {
       prevRefreshRef.current = lastRefresh
-      prevRunningTasksRef.current = runningTasks
+      prevRunningTasksRef.current = liveRunningTasks
     }
-  }, [lastRefresh, runningTasks])
+  }, [lastRefresh, liveRunningTasks])
 
   const taskDelta =
-    prevRunningTasksRef.current === null ? 0 : runningTasks - prevRunningTasksRef.current
+    prevRunningTasksRef.current === null ? 0 : liveRunningTasks - prevRunningTasksRef.current
+  const disconnected = connectionState === 'disconnected' || Boolean(error)
+
   const hasData =
     Boolean(swarm) ||
     nodes.length > 0 ||
@@ -543,111 +627,122 @@ export function OverviewView() {
     events.length > 0 ||
     findings.length > 0 ||
     incidents.length > 0
-  const disconnected = connectionState === 'disconnected' || Boolean(error)
-  const scenario = searchParams.get('scenario')
+
+  const endpoint = (import.meta.env.VITE_API_BASE as string | undefined) ?? '/api/v1'
+  const forcedScenario = searchParams.get('scenario')
   const scenarioKind: Scenario | null =
-    scenario === 'healthy' || scenario === 'degraded' || scenario === 'disconnected'
-      ? scenario
+    forcedScenario === 'healthy' || forcedScenario === 'degraded' || forcedScenario === 'disconnected'
+      ? forcedScenario
       : !hasData && !loading
         ? disconnected
           ? 'disconnected'
           : 'healthy'
         : null
-  const endpoint = (import.meta.env.VITE_API_BASE as string | undefined) ?? '/api/v1'
 
-  const model = useMemo<Model>(() => {
+  const model = useMemo<OverviewModel>(() => {
     if (scenarioKind) return scenarioModel(scenarioKind, endpoint)
 
-    const managers = nodes.filter((n) => n.role === 'manager')
-    const workers = nodes.filter((n) => n.role === 'worker')
-    const unavailableNodes = nodes.filter((n) => n.state !== 'ready').length
-    const desiredReplicas = services.reduce((sum, s) => sum + s.desiredReplicas, 0)
-    const runningReplicas = services.reduce((sum, s) => sum + s.runningTasks, 0)
-    const riskyServices = services.filter(
-      (s) => s.runningTasks < s.desiredReplicas || s.failedTasks > 0,
-    )
-    const criticalCount = findings.filter((f) => f.severity === 'critical').length
-    const warningCount = findings.filter(
-      (f) => f.severity === 'high' || f.severity === 'medium',
+    const managers = nodes.filter((node) => node.role === 'manager')
+    const workers = nodes.filter((node) => node.role === 'worker')
+    const managersOnline = managers.filter(
+      (node) => node.state === 'ready' && node.managerStatus?.reachability !== 'unreachable',
     ).length
-    const degraded = criticalCount > 0 || unavailableNodes > 0 || riskyServices.length > 0
-    const healthLabel: Model['healthLabel'] = disconnected
+    const workersOnline = workers.filter((node) => node.state === 'ready').length
+    const unavailableNodes = nodes.filter((node) => node.state !== 'ready').length
+    const desiredReplicas = services.reduce((sum, service) => sum + service.desiredReplicas, 0)
+    const runningReplicas = services.reduce((sum, service) => sum + service.runningTasks, 0)
+    const unhealthyServices = services.filter(
+      (service) => service.runningTasks < service.desiredReplicas || service.failedTasks > 0,
+    )
+    const pendingTasks = tasks.filter((task) => PENDING_TASK_STATES.has(task.currentState)).length
+    const criticalFindings = findings.filter(
+      (finding) => finding.severity === 'critical' || finding.severity === 'high',
+    ).length
+    const warningFindings = findings.filter((finding) => finding.severity === 'medium').length
+    const findingsCount = findings.length
+    const stale = disconnected || !lastRefresh || Date.now() - lastRefresh > 120_000
+    const unknown = disconnected && !lastRefresh && !hasData
+    const degraded =
+      disconnected || criticalFindings > 0 || unavailableNodes > 0 || unhealthyServices.length > 0
+    const healthLabel: OverviewModel['healthLabel'] = disconnected
       ? 'Unknown'
       : degraded
         ? 'Degraded'
         : 'Healthy'
-    const healthTone: Tone = disconnected ? 'unknown' : degraded ? 'critical' : 'stable'
-    const freshness = lastRefresh
-      ? `Last sync ${relativeTime(new Date(lastRefresh).toISOString())}`
-      : 'No successful sync yet'
-    const stale = !lastRefresh || Date.now() - lastRefresh > 120000
 
     return {
       disconnected,
-      clusterName: swarm?.clusterID ? `cluster/${swarm.clusterID.slice(0, 16)}` : 'cluster/unset',
+      stale,
+      clusterName: swarm?.clusterID ? `cluster/${swarm.clusterID.slice(0, 20)}` : 'cluster/unset',
       environment: swarm?.mode?.toUpperCase() ?? 'DEMO',
       endpoint,
       healthLabel,
-      healthTone,
       summary: disconnected
-        ? 'SwarmLens is not connected to the cluster. Live telemetry and controls are paused.'
+        ? 'SwarmLens is not connected. Live telemetry and controls are paused.'
         : degraded
-          ? `Cluster is partially degraded. ${riskyServices.length} services require attention and ${unavailableNodes} nodes are unavailable.`
-          : 'Cluster is healthy. No active critical findings. Scheduling and replicas are nominal.',
-      freshness,
-      staleNote: disconnected
-        ? lastRefresh
-          ? 'Showing last known data.'
-          : 'No previous telemetry snapshot available.'
-        : stale
-          ? 'Telemetry is stale.'
-          : 'Telemetry is live.',
+          ? `Cluster is partially degraded. ${unhealthyServices.length} services require attention and ${unavailableNodes} nodes are unavailable.`
+          : `Cluster is healthy. No active critical findings. Last diagnostics run ${lastRun ? relativeTime(new Date(lastRun).toISOString()) : 'not available'}.`,
+      freshness: lastRefresh
+        ? `Last sync ${relativeTime(new Date(lastRefresh).toISOString())}`
+        : 'No successful sync yet',
       metrics: [
         {
-          id: 'h',
+          id: 'health',
           label: 'Cluster Health',
-          value: healthLabel,
-          detail:
-            desiredReplicas > 0
-              ? `${runningReplicas}/${desiredReplicas} replicas healthy`
-              : 'No scheduled replicas',
+          value: unknown && desiredReplicas === 0 ? '—' : healthLabel,
+          supporting:
+            unknown && desiredReplicas === 0
+              ? 'UNKNOWN'
+              : `${runningReplicas}/${desiredReplicas || 0} replicas healthy`,
           note: lastRefresh
             ? `Checked ${relativeTime(new Date(lastRefresh).toISOString())}`
-            : 'No check data',
-          tone: healthTone,
+            : 'No telemetry snapshot',
           to: '/diagnostics',
+          tone: degraded ? 'attention' : disconnected ? 'muted' : 'primary',
+          icon: ShieldIcon,
+          unknown: unknown && desiredReplicas === 0,
         },
         {
-          id: 'n',
+          id: 'nodes',
           label: 'Nodes',
-          value: `${nodes.length}`,
-          detail: `${managers.length} managers / ${workers.length} workers`,
+          value: unknown && nodes.length === 0 ? '—' : `${nodes.length}`,
+          supporting:
+            unknown && nodes.length === 0
+              ? 'UNKNOWN'
+              : `${managers.length} managers / ${workers.length} workers`,
           note: `${unavailableNodes} unavailable`,
-          tone: unavailableNodes > 0 ? 'critical' : disconnected ? 'unknown' : 'stable',
           to: '/nodes',
+          tone: unavailableNodes > 0 ? 'attention' : disconnected ? 'muted' : 'primary',
+          icon: ServerIcon,
+          unknown: unknown && nodes.length === 0,
         },
         {
-          id: 't',
+          id: 'tasks',
           label: 'Running Tasks',
-          value: `${runningTasks}`,
-          detail: `${Math.max(runningTasks - failedTasks, 0)} healthy / ${failedTasks} failed`,
+          value: unknown && tasks.length === 0 ? '—' : `${liveRunningTasks}`,
+          supporting:
+            unknown && tasks.length === 0
+              ? 'UNKNOWN'
+              : `${Math.max(liveRunningTasks - liveFailedTasks, 0)} healthy / ${liveFailedTasks} failed`,
           note: `${delta(taskDelta)} since last refresh`,
-          tone: failedTasks > 0 ? 'critical' : disconnected ? 'unknown' : 'stable',
           to: '/tasks',
+          tone: liveFailedTasks > 0 ? 'attention' : disconnected ? 'muted' : 'primary',
+          icon: ActivityIcon,
+          unknown: unknown && tasks.length === 0,
         },
         {
-          id: 'f',
+          id: 'findings',
           label: 'Active Findings',
-          value: `${findings.length}`,
-          detail: `${criticalCount} critical / ${warningCount} warning`,
-          note: findings.length > 0 ? 'Review incidents and diagnostics' : 'No active findings',
-          tone:
-            criticalCount > 0 || warningCount > 0
-              ? 'critical'
-              : disconnected
-                ? 'unknown'
-                : 'stable',
+          value: unknown && findingsCount === 0 ? '—' : `${findingsCount}`,
+          supporting:
+            unknown && findingsCount === 0
+              ? 'UNKNOWN'
+              : `${criticalFindings} critical / ${warningFindings} warning`,
+          note: findingsCount > 0 ? 'Review incidents and diagnostics' : 'No active findings',
           to: '/incidents',
+          tone: findingsCount > 0 ? 'attention' : disconnected ? 'muted' : 'primary',
+          icon: AlertIcon,
+          unknown: unknown && findingsCount === 0,
         },
       ],
       checks: [
@@ -655,313 +750,378 @@ export function OverviewView() {
           id: 'c1',
           label: 'Control plane reachable',
           detail: disconnected
-            ? 'Connection lost to manager endpoint'
-            : 'Manager API and leadership path responding',
-          state: disconnected ? 'Unknown' : 'Nominal',
-          tone: disconnected ? 'unknown' : 'stable',
+            ? 'Manager endpoint currently unreachable.'
+            : 'Manager API responding in expected range.',
+          status: disconnected ? 'Unknown' : 'Nominal',
+          tone: disconnected ? 'muted' : 'primary',
         },
         {
           id: 'c2',
           label: 'Node quorum',
-          detail: swarm?.quorumHealthy ? 'Manager quorum healthy' : 'Manager quorum at risk',
-          state: disconnected ? 'Unknown' : swarm?.quorumHealthy ? 'Nominal' : 'Degraded',
-          tone: disconnected ? 'unknown' : swarm?.quorumHealthy ? 'stable' : 'critical',
+          detail: `${managersOnline}/${managers.length || 0} managers reachable.`,
+          status:
+            disconnected
+              ? 'Unknown'
+              : managersOnline < Math.max(1, Math.ceil(managers.length / 2))
+                ? 'Degraded'
+                : 'Nominal',
+          tone:
+            disconnected
+              ? 'muted'
+              : managersOnline < Math.max(1, Math.ceil(managers.length / 2))
+                ? 'attention'
+                : 'primary',
+        },
+        {
+          id: 'c3',
+          label: 'Task scheduling',
+          detail: `${pendingTasks} pending tasks, ${liveFailedTasks} failed tasks.`,
+          status:
+            disconnected ? 'Unknown' : liveFailedTasks > 0 ? 'Degraded' : pendingTasks > 0 ? 'Watch' : 'Nominal',
+          tone:
+            disconnected
+              ? 'muted'
+              : liveFailedTasks > 0 || pendingTasks > 0
+                ? 'attention'
+                : 'primary',
+        },
+        {
+          id: 'c4',
+          label: 'Replica health',
+          detail: `${runningReplicas}/${desiredReplicas || 0} desired replicas running.`,
+          status: disconnected ? 'Unknown' : runningReplicas < desiredReplicas ? 'Degraded' : 'Nominal',
+          tone: disconnected ? 'muted' : runningReplicas < desiredReplicas ? 'attention' : 'primary',
+        },
+        {
+          id: 'c5',
+          label: 'Network/config health',
+          detail: disconnected
+            ? 'No live network/config telemetry.'
+            : `${networks.length} networks / ${configs.length} configs in scope.`,
+          status: disconnected ? 'Unknown' : 'Nominal',
+          tone: disconnected ? 'muted' : 'primary',
         },
       ],
-      findings: [
-        ...incidents
-          .filter((i) => i.status !== 'resolved')
-          .slice(0, 4)
-          .map((i) => ({
-            id: `inc-${i.id}`,
-            title: i.title,
-            object: i.affectedServices[0] ? `service/${i.affectedServices[0]}` : 'cluster',
-            timestamp: i.updatedAt || i.createdAt,
-            tone: toneFromSeverity(i.severity),
-            to: '/incidents',
-          })),
-        ...findings.slice(0, 4).map((f) => ({
-          id: `f-${f.id}`,
-          title: f.message,
-          object: f.resource,
-          timestamp: f.detectedAt,
-          tone: toneFromSeverity(f.severity),
-          to: '/diagnostics',
-        })),
-      ].slice(0, 6),
-      events: events.slice(0, 10).map((evt, idx) => ({
+
+      findings: findings.slice(0, 6).map((finding) => ({
+        id: finding.id,
+        title: finding.message,
+        object: finding.resource,
+        timestamp: finding.detectedAt,
+        tone: toneFromSeverity(finding.severity),
+        to: '/incidents',
+      })),
+      events: events.slice(0, 12).map((evt, idx) => ({
         id: `${evt.timestamp}-${idx}`,
-        title: `${evt.action} ${evt.message}`.trim(),
+        title: evt.message || `${evt.type} ${evt.action}`,
         source: evt.actor || evt.type,
         timestamp: evt.timestamp,
-        metadata: evt.type,
+        metadata: evt.action ? `${evt.type} ${evt.action}` : undefined,
         tone: toneFromEvent(evt),
       })),
-      attention: riskyServices.slice(0, 6).map((s) => ({
-        id: s.id,
-        name: s.name,
-        replicas: `${s.runningTasks} / ${s.desiredReplicas}`,
-        state: s.runningTasks < s.desiredReplicas ? 'Replica Drift' : 'Task Failures',
+      attention: unhealthyServices.slice(0, 8).map((service) => ({
+        id: service.id,
+        name: service.name,
+        replicas: `${service.runningTasks} / ${service.desiredReplicas}`,
+        state: service.runningTasks < service.desiredReplicas ? 'Replica drift' : 'Task failures',
         issue:
-          s.failedTasks > 0
-            ? `${s.failedTasks} failed tasks`
-            : `${s.desiredReplicas - s.runningTasks} replicas missing`,
+          service.failedTasks > 0
+            ? `${service.failedTasks} failed tasks`
+            : `${service.desiredReplicas - service.runningTasks} replicas missing`,
       })),
       diagnostics: {
-        status: disconnected
-          ? 'Offline'
-          : running
-            ? 'Running'
-            : criticalCount > 0 || warningCount > 0
-              ? 'Degraded'
-              : 'Clear',
+        status: disconnected ? 'Offline' : degraded ? 'Degraded' : 'Clear',
         lastRun,
         durationMs: lastDurationMs,
-        findingsCount: findings.length,
+        findingsCount,
       },
       posture: [
         {
           id: 'p1',
-          label: 'Managers Online',
-          value: `${managers.filter((n) => n.state === 'ready').length} / ${managers.length}`,
-          tone: disconnected ? 'unknown' : unavailableNodes > 0 ? 'critical' : 'stable',
+          label: 'Managers online',
+          value: `${managersOnline} / ${managers.length || 0}`,
+          tone: disconnected ? 'muted' : managersOnline < managers.length ? 'attention' : 'primary',
         },
         {
           id: 'p2',
-          label: 'Workers Online',
-          value: `${workers.filter((n) => n.state === 'ready').length} / ${workers.length}`,
-          tone: disconnected ? 'unknown' : unavailableNodes > 0 ? 'critical' : 'stable',
+          label: 'Workers online',
+          value: `${workersOnline} / ${workers.length || 0}`,
+          tone: disconnected ? 'muted' : workersOnline < workers.length ? 'attention' : 'primary',
         },
         {
           id: 'p3',
-          label: 'Total Replicas',
-          value: `${desiredReplicas}`,
-          tone: disconnected ? 'unknown' : 'stable',
+          label: 'Total replicas',
+          value: `${runningReplicas} / ${desiredReplicas || 0}`,
+          tone: disconnected ? 'muted' : runningReplicas < desiredReplicas ? 'attention' : 'primary',
+        },
+        {
+          id: 'p4',
+          label: 'Pending tasks',
+          value: `${pendingTasks}`,
+          tone: disconnected ? 'muted' : pendingTasks > 0 ? 'attention' : 'primary',
+        },
+        {
+          id: 'p5',
+          label: 'Unhealthy services',
+          value: `${unhealthyServices.length}`,
+          tone: disconnected ? 'muted' : unhealthyServices.length > 0 ? 'attention' : 'primary',
+        },
+        {
+          id: 'p6',
+          label: 'Swarm quorum',
+          value: disconnected ? 'unknown' : swarm?.raftState ?? 'unknown',
+          tone: disconnected ? 'muted' : swarm?.quorumHealthy ? 'primary' : 'attention',
         },
       ],
-      guidance:
-        services.length === 0
+      guidance: disconnected
+        ? {
+            title: 'Reconnect cluster to resume operations',
+            description: 'Telemetry is paused while disconnected. Last known data is shown as stale.',
+            steps: ['Check manager reachability.', 'Validate credentials and TLS.', 'Reconnect and refresh telemetry.'],
+          }
+        : services.length === 0
           ? {
-              title: 'No Active Workloads Yet',
-              description:
-                'This cluster has no active workload telemetry. Provision a stack to start operational tracking.',
-              steps: [
-                'Create or deploy a stack.',
-                'Verify managers and workers are connected.',
-                'Run diagnostics to establish baseline findings.',
-              ],
+              title: 'This cluster has no active workloads yet',
+              description: 'Control plane is healthy, but no services are currently scheduled.',
+              steps: ['Create your first stack.', 'Connect worker nodes.', 'Run diagnostics after deployment.'],
             }
-          : disconnected
-            ? {
-                title: 'Connection Required',
-                description:
-                  'Reconnect to restore live telemetry, diagnostics execution, and operator actions.',
-                steps: [
-                  'Validate manager endpoint reachability.',
-                  'Reconnect the cluster session.',
-                  'Refresh and confirm live telemetry.',
-                ],
-              }
-            : {
-                title: 'Operational Guidance',
-                description:
-                  'Prioritize risk reduction in services with replica drift or failed tasks.',
-                steps: [
-                  'Inspect services with degraded replicas.',
-                  'Run diagnostics to confirm remediation.',
-                  'Check audit trail for recent changes.',
-                ],
-              },
+          : {
+              title: degraded ? 'Prioritize mitigation sequence' : 'No immediate action required',
+              description: degraded
+                ? 'Recover quorum first, then resolve placement and rollout pressure.'
+                : 'Cluster posture is stable and no urgent intervention is needed.',
+              steps: degraded
+                ? ['Restore manager/worker reachability.', 'Clear placement failures.', 'Re-run diagnostics and validate closure.']
+                : ['Run diagnostics on schedule.', 'Review audit trail after writes.', 'Inspect services before rollouts.'],
+            },
+      telemetrySeed: {
+        runningTasks: liveRunningTasks,
+        failedTasks: liveFailedTasks,
+        managersOnline,
+        workersOnline,
+        criticalFindings,
+        warningFindings,
+        degraded,
+      },
     }
   }, [
     scenarioKind,
     endpoint,
-    swarm,
+    disconnected,
     nodes,
     services,
+    tasks,
     events,
     findings,
-    incidents,
-    disconnected,
+    networks.length,
+    configs.length,
+    swarm,
+    hasData,
     lastRefresh,
-    runningTasks,
-    failedTasks,
-    taskDelta,
-    running,
     lastRun,
     lastDurationMs,
+    liveRunningTasks,
+    liveFailedTasks,
+    taskDelta,
   ])
-
-  const criticalFindings = findings.filter((f) => f.severity === 'critical').length
-  const warningFindings = findings.filter(
-    (f) => f.severity === 'high' || f.severity === 'medium',
-  ).length
-  const managersOnline = nodes.filter((n) => n.role === 'manager' && n.state === 'ready').length
-  const workersOnline = nodes.filter((n) => n.role === 'worker' && n.state === 'ready').length
 
   const telemetry = useMemo(
     () =>
       buildOverviewTelemetry({
-        runningTasks:
-          runningTasks > 0
-            ? runningTasks
-            : leadingInt(
-                model.metrics.find((metric) => metric.id === 't')?.value,
-                model.healthTone === 'critical' ? 124 : 72,
-              ),
-        failedTasks: failedTasks > 0 ? failedTasks : model.healthTone === 'critical' ? 4 : 0,
-        managersOnline:
-          managersOnline > 0 ? managersOnline : leadingInt(model.posture[0]?.value, 2),
-        workersOnline: workersOnline > 0 ? workersOnline : leadingInt(model.posture[1]?.value, 4),
-        criticalFindings:
-          criticalFindings > 0 ? criticalFindings : model.healthTone === 'critical' ? 2 : 0,
-        warningFindings:
-          warningFindings > 0 ? warningFindings : model.healthTone === 'critical' ? 3 : 0,
+        runningTasks: model.telemetrySeed.runningTasks,
+        failedTasks: model.telemetrySeed.failedTasks,
+        managersOnline: model.telemetrySeed.managersOnline,
+        workersOnline: model.telemetrySeed.workersOnline,
+        criticalFindings: model.telemetrySeed.criticalFindings,
+        warningFindings: model.telemetrySeed.warningFindings,
         disconnected: model.disconnected,
-        degraded: model.healthTone === 'critical',
+        degraded: model.telemetrySeed.degraded,
       }),
-    [
-      runningTasks,
-      failedTasks,
-      managersOnline,
-      workersOnline,
-      criticalFindings,
-      warningFindings,
-      model.metrics,
-      model.posture,
-      model.disconnected,
-      model.healthTone,
-    ],
+    [model],
   )
 
-  const findingDistribution = useMemo(
-    () => [
-      { bucket: 'Critical', findings: criticalFindings },
-      { bucket: 'Warning', findings: warningFindings },
-      {
-        bucket: 'Info',
-        findings: Math.max(findings.length - (criticalFindings + warningFindings), 0),
-      },
-    ],
-    [criticalFindings, warningFindings, findings.length],
-  )
+  const findingDistribution = useMemo(() => {
+    const rows = [
+      { bucket: 'Critical', findings: model.telemetrySeed.criticalFindings },
+      { bucket: 'Warning', findings: model.telemetrySeed.warningFindings },
+    ]
+    return rows.every((row) => row.findings === 0) ? [{ bucket: 'None', findings: 0 }] : rows
+  }, [model.telemetrySeed.criticalFindings, model.telemetrySeed.warningFindings])
+
   const grafana = grafanaConfig()
-
   const canRunDiagnostics = !model.disconnected && !running
-  const findingsError = diagError || incidentsError
-  const eventsError = error && events.length === 0 && !scenarioKind
 
   if (loading && !hasData && !scenarioKind) return <OverviewSkeleton />
 
   return (
-    <div className="min-h-full bg-app text-text-primary">
+    <div>
       <section
-        className={cn('industrial-section', model.disconnected && 'min-h-[40vh] flex items-center')}
+        className={cn('industrial-section pt-12', model.disconnected && 'flex min-h-[40vh] items-center')}
       >
-        <div className="mx-auto w-full max-w-[1440px] px-4 sm:px-6 lg:px-10">
-          <p className="industrial-label">Cluster State</p>
+        <div className="mx-auto w-full max-w-[1600px] px-4 sm:px-6 lg:px-10">
+          <p className={cn('industrial-label', model.disconnected && 'text-state-danger')}>
+            Cluster State
+          </p>
           <h2
             className={cn(
               'industrial-data mt-5 leading-[0.92] tracking-[-0.03em]',
               model.disconnected
                 ? 'industrial-pulse text-[clamp(2.8rem,8vw,7rem)] text-state-danger'
-                : 'text-[clamp(2.6rem,7vw,5.8rem)] text-text-primary',
+                : 'text-[clamp(2rem,4vw,5rem)] text-text-primary',
             )}
           >
             {model.clusterName}
           </h2>
-          <p className={cn('mt-2 industrial-label', toneClass(model.healthTone))}>
-            {model.healthLabel}
-          </p>
-          <p className="mt-4 max-w-3xl text-base leading-relaxed text-text-secondary">
+          <p
+            className={cn(
+              'mt-4 max-w-3xl text-sm leading-relaxed',
+              model.disconnected ? 'text-text-primary' : 'text-text-secondary',
+            )}
+          >
             {model.summary}
           </p>
-          <p className="mt-2 text-sm text-text-tertiary">{model.staleNote}</p>
-          <div className="mt-8 flex flex-wrap items-center gap-8">
-            <button
-              type="button"
-              onClick={() => {
-                void run()
-              }}
-              disabled={!canRunDiagnostics}
-              className={cn(
-                'industrial-action industrial-action-accent',
-                !canRunDiagnostics && 'cursor-not-allowed opacity-30',
-              )}
-            >
-              <DiagnosticsIcon className="h-3.5 w-3.5" />
-              {running ? 'Running Diagnostics' : 'Run Diagnostics'}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                void fetchAll()
-              }}
-              className="industrial-action"
-            >
-              <RefreshIcon className="h-3.5 w-3.5" />
-              Refresh Telemetry
-            </button>
-            <button type="button" onClick={() => navigate('/audit')} className="industrial-action">
-              <ClockIcon className="h-3.5 w-3.5" />
-              Open Audit Trail
-            </button>
-          </div>
+          <p className={cn('mt-2 industrial-label', model.healthLabel === 'Degraded' && 'text-state-danger')}>
+            {model.environment} · {model.healthLabel} · {model.freshness}
+          </p>
+          <p className="mt-1 industrial-data text-xs text-text-tertiary">{model.endpoint}</p>
+
+          {model.disconnected ? (
+            <div className="mt-8 space-y-4">
+              <button
+                type="button"
+                onClick={() => {
+                  void fetchAll()
+                }}
+                className="industrial-action industrial-action-accent"
+              >
+                Reconnect Cluster
+              </button>
+              <div className="flex flex-wrap items-center gap-6">
+                <button type="button" disabled className="industrial-action cursor-not-allowed opacity-35">
+                  Run Diagnostics
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void fetchAll()
+                  }}
+                  className="industrial-action opacity-35 hover:opacity-55 focus-visible:opacity-55"
+                >
+                  Refresh Telemetry
+                </button>
+                <button
+                  type="button"
+                  onClick={() => navigate('/audit')}
+                  className="industrial-action opacity-35 hover:opacity-55 focus-visible:opacity-55"
+                >
+                  Open Audit Trail
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="mt-8 flex flex-wrap items-center gap-8">
+              <button
+                type="button"
+                onClick={() => {
+                  void run()
+                }}
+                disabled={!canRunDiagnostics}
+                className={cn(
+                  'industrial-action industrial-action-accent',
+                  !canRunDiagnostics && 'cursor-not-allowed opacity-35',
+                )}
+              >
+                {running ? 'Running Diagnostics' : 'Run Diagnostics'}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  void fetchAll()
+                }}
+                disabled={loading}
+                className={cn('industrial-action', loading && 'cursor-not-allowed opacity-35')}
+              >
+                <RefreshIcon className="h-3.5 w-3.5" />
+                {loading ? 'Refreshing' : 'Refresh Telemetry'}
+              </button>
+              <button type="button" onClick={() => navigate('/audit')} className="industrial-action">
+                Open Audit Trail
+              </button>
+            </div>
+          )}
         </div>
       </section>
+
       <section className="industrial-section">
-        <div className="mx-auto w-full max-w-[1440px] px-4 sm:px-6 lg:px-10">
-          <p className="industrial-label">Operational Metrics</p>
-          <div className="mt-6 grid grid-cols-2 gap-x-8 gap-y-8 xl:grid-cols-4">
-            {model.metrics.map((metric) => (
-              <button
-                key={metric.id}
-                type="button"
-                onClick={() => navigate(metric.to)}
-                className="industrial-row w-full text-left focus-visible:outline-none"
-              >
-                <p className={cn('industrial-metric', toneClass(metric.tone))}>{metric.value}</p>
-                <p className="mt-3 industrial-label text-text-secondary">{metric.label}</p>
-                <p className="mt-2 text-sm text-text-secondary">{metric.detail}</p>
-                <p className={cn('mt-2 industrial-data text-xs', toneClass(metric.tone))}>
-                  {metric.note}
-                </p>
-              </button>
-            ))}
+        <div className="mx-auto w-full max-w-[1600px] px-4 sm:px-6 lg:px-10">
+          <p className={cn('industrial-label', model.stale ? 'text-state-danger' : 'text-text-secondary')}>
+            {model.stale ? 'STALE' : 'LIVE'}
+          </p>
+          <div className="mt-8 grid grid-cols-1 gap-x-8 gap-y-8 md:grid-cols-2 xl:grid-cols-4">
+            {model.metrics.map((metric) => {
+              const Icon = metric.icon
+              return (
+                <button
+                  key={metric.id}
+                  type="button"
+                  onClick={() => navigate(metric.to)}
+                  className={cn(
+                    'industrial-row w-full text-left focus-visible:outline-none',
+                    model.stale && 'opacity-40',
+                  )}
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <p
+                        className={cn(
+                          'industrial-metric truncate',
+                          metric.unknown ? 'text-state-danger' : toneClass(metric.tone),
+                        )}
+                      >
+                        {metric.value}
+                      </p>
+                      <p
+                        className={cn(
+                          'mt-3 industrial-label',
+                          metric.unknown ? 'text-state-danger' : 'text-text-secondary',
+                        )}
+                      >
+                        {metric.label}
+                      </p>
+                      <p
+                        className={cn(
+                          'mt-2 text-sm',
+                          metric.unknown ? 'text-state-danger' : 'text-text-secondary',
+                        )}
+                      >
+                        {metric.supporting}
+                      </p>
+                      <p className={cn('mt-2 industrial-data text-xs', toneClass(metric.tone))}>
+                        {metric.note}
+                      </p>
+                    </div>
+                    <Icon
+                      className={cn(
+                        'mt-1 h-5 w-5 shrink-0',
+                        metric.unknown ? 'text-state-danger' : toneClass(metric.tone),
+                      )}
+                    />
+                  </div>
+                </button>
+              )
+            })}
           </div>
         </div>
       </section>
 
       <section className="industrial-section">
-        <div className="mx-auto w-full max-w-[1440px] px-4 sm:px-6 lg:px-10">
+        <div className="mx-auto w-full max-w-[1600px] px-4 sm:px-6 lg:px-10">
           <p className="industrial-label">Telemetry Graphs</p>
           {grafana.enabled ? (
-            <>
-              <div className="mt-6 grid grid-cols-1 gap-10 xl:grid-cols-2">
-                <GrafanaEmbed
-                  panelId={1}
-                  title="Cluster Task Throughput"
-                  subtitle="Live panel from Grafana"
-                />
-                <GrafanaEmbed
-                  panelId={2}
-                  title="Failure Pressure"
-                  subtitle="Critical and warning findings"
-                />
-              </div>
-              <div className="mt-10 grid grid-cols-1 gap-10 xl:grid-cols-2">
-                <GrafanaEmbed
-                  panelId={3}
-                  title="Node Availability"
-                  subtitle="Managers and workers online"
-                />
-                <GrafanaEmbed
-                  panelId={4}
-                  title="Severity Distribution"
-                  subtitle="Current findings mix"
-                />
-              </div>
-            </>
+            <div className="mt-6 grid grid-cols-1 gap-10 xl:grid-cols-2">
+              <GrafanaEmbed panelId={1} title="Cluster Task Throughput" subtitle="Live panel from Grafana" />
+              <GrafanaEmbed panelId={2} title="Failure Pressure" subtitle="Critical and warning findings" />
+            </div>
           ) : (
             <>
               <div className="mt-6 grid grid-cols-1 gap-10 xl:grid-cols-2">
@@ -977,7 +1137,7 @@ export function OverviewView() {
                 />
                 <GrafanaAreaSeries
                   title="Findings Pressure"
-                  subtitle="Critical and warning signals over time"
+                  subtitle="Critical and warning findings over time"
                   data={telemetry.throughput}
                   xKey="time"
                   areas={[
@@ -1010,32 +1170,22 @@ export function OverviewView() {
         </div>
       </section>
 
-      <section className="px-4 pb-16 pt-12 sm:px-6 lg:px-10">
-        <div className="mx-auto grid w-full max-w-[1440px] grid-cols-1 gap-14 xl:grid-cols-12">
+      <section className="px-4 pb-16 pt-10 sm:px-6 lg:px-10">
+        <div className="mx-auto grid w-full max-w-[1600px] grid-cols-1 gap-14 xl:grid-cols-12">
           <div className="space-y-16 xl:col-span-8">
-            <section>
-              <div className="flex items-end justify-between gap-6">
-                <div>
-                  <p className="industrial-label">Status Summary</p>
-                  <h3 className="mt-2 font-heading text-[1.9rem] uppercase leading-none tracking-[0.04em]">
-                    Cluster Status
-                  </h3>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => navigate('/diagnostics')}
-                  className="industrial-action"
-                >
-                  View Diagnostics
-                  <ArrowRightIcon className="h-3.5 w-3.5" />
-                </button>
-              </div>
-              <ul className="mt-6 divide-y divide-border-muted">
+            <section aria-labelledby="status-title">
+              <SectionHeading
+                id="status-title"
+                eyebrow="Cluster Status Summary"
+                title="Operational Narrative"
+                actionLabel="View Diagnostics"
+                onAction={() => navigate('/diagnostics')}
+                actionDisabled={model.disconnected}
+              />
+              <p className="mt-5 text-sm leading-relaxed text-text-secondary">{model.summary}</p>
+              <ul className="mt-6 divide-y divide-white/10 border-t border-white/10">
                 {model.checks.map((check) => (
-                  <li
-                    key={check.id}
-                    className="industrial-row flex items-start justify-between gap-6"
-                  >
+                  <li key={check.id} className="industrial-row flex items-start justify-between gap-6">
                     <div className="flex min-w-0 items-start gap-3">
                       <span className="mt-0.5 shrink-0">{toneIcon(check.tone)}</span>
                       <div>
@@ -1043,47 +1193,46 @@ export function OverviewView() {
                         <p className="mt-1 text-sm text-text-secondary">{check.detail}</p>
                       </div>
                     </div>
-                    <span
-                      className={cn('industrial-label whitespace-nowrap', toneClass(check.tone))}
-                    >
-                      {check.state}
+                    <span className={cn('industrial-label whitespace-nowrap', toneClass(check.tone))}>
+                      {check.status}
                     </span>
                   </li>
                 ))}
               </ul>
             </section>
 
-            <section>
-              <div className="flex items-end justify-between gap-6">
-                <div>
-                  <p className="industrial-label">Active Findings</p>
-                  <h3 className="mt-2 font-heading text-[1.9rem] uppercase leading-none tracking-[0.04em]">
-                    Incidents & Findings
-                  </h3>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => navigate('/incidents')}
-                  className="industrial-action"
-                >
-                  Open Incidents
-                  <ArrowRightIcon className="h-3.5 w-3.5" />
-                </button>
-              </div>
+            <section aria-labelledby="findings-title">
+              <SectionHeading
+                id="findings-title"
+                eyebrow="Active Findings"
+                title="Incidents & Findings"
+                actionLabel="Open Incidents"
+                onAction={() => navigate('/incidents')}
+              />
               {findingsError && model.findings.length === 0 ? (
-                <div className="mt-6 border-t border-state-danger/50 pt-6">
+                <div className="mt-6 border-t border-white/10 pt-6">
                   <p className="text-sm text-state-danger">Unable to load findings</p>
                   <p className="mt-1 text-sm text-text-secondary">{findingsError}</p>
                 </div>
               ) : model.findings.length === 0 ? (
-                <div className="mt-6 border-t border-border-muted pt-6">
+                <div className="mt-6 border-t border-white/10 pt-6">
                   <p className="text-sm text-text-primary">No active findings</p>
                   <p className="mt-1 text-sm text-text-secondary">
-                    The latest diagnostics run did not detect warnings or critical issues.
+                    Latest diagnostics did not detect warning or critical issues.
                   </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void run()
+                    }}
+                    disabled={!canRunDiagnostics}
+                    className={cn('industrial-action mt-3', !canRunDiagnostics && 'cursor-not-allowed opacity-35')}
+                  >
+                    Run Diagnostics
+                  </button>
                 </div>
               ) : (
-                <ul className="mt-6 divide-y divide-border-muted">
+                <ul className="mt-6 divide-y divide-white/10 border-t border-white/10">
                   {model.findings.map((finding) => (
                     <li key={finding.id}>
                       <button
@@ -1095,17 +1244,14 @@ export function OverviewView() {
                           <div className="min-w-0">
                             <div className="flex items-center gap-2">
                               {toneIcon(finding.tone)}
-                              <p className={cn('truncate text-sm', toneClass(finding.tone))}>
-                                {finding.title}
-                              </p>
+                              <p className={cn('truncate text-sm', toneClass(finding.tone))}>{finding.title}</p>
                             </div>
-                            <p className="mt-1 font-mono text-xs text-text-secondary">
-                              {finding.object} | {relativeTime(finding.timestamp)}
+                            <p className="mt-1 text-xs text-text-secondary">
+                              <span className="industrial-data">{finding.object}</span> |{' '}
+                              <span className="industrial-data">{relativeTime(finding.timestamp)}</span>
                             </p>
                           </div>
-                          <span className="industrial-label whitespace-nowrap text-text-secondary">
-                            Open
-                          </span>
+                          <span className="industrial-label whitespace-nowrap text-text-secondary">Open</span>
                         </div>
                       </button>
                     </li>
@@ -1114,37 +1260,23 @@ export function OverviewView() {
               )}
             </section>
 
-            <section>
-              <div className="flex items-end justify-between gap-6">
-                <div>
-                  <p className="industrial-label">Recent Activity</p>
-                  <h3 className="mt-2 font-heading text-[1.9rem] uppercase leading-none tracking-[0.04em]">
-                    Event Timeline
-                  </h3>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => navigate('/audit')}
-                  className="industrial-action"
-                >
-                  Inspect Audit Trail
-                  <ArrowRightIcon className="h-3.5 w-3.5" />
-                </button>
-              </div>
-              {eventsError ? (
-                <div className="mt-6 border-t border-state-danger/50 pt-6">
-                  <p className="text-sm text-state-danger">Unable to load recent events</p>
-                  <p className="mt-1 text-sm text-text-secondary">{error}</p>
-                </div>
-              ) : model.events.length === 0 ? (
-                <div className="mt-6 border-t border-border-muted pt-6">
+            <section aria-labelledby="events-title">
+              <SectionHeading
+                id="events-title"
+                eyebrow="Recent Events"
+                title="Cluster Timeline"
+                actionLabel="Inspect Audit Trail"
+                onAction={() => navigate('/audit')}
+              />
+              {model.events.length === 0 ? (
+                <div className="mt-6 border-t border-white/10 pt-6">
                   <p className="text-sm text-text-primary">No recent events</p>
                   <p className="mt-1 text-sm text-text-secondary">
                     No cluster activity has been recorded in this session yet.
                   </p>
                 </div>
               ) : (
-                <ul className="mt-6 divide-y divide-border-muted">
+                <ul className="mt-6 divide-y divide-white/10 border-t border-white/10">
                   {model.events.map((evt) => (
                     <li key={evt.id}>
                       <div className="industrial-row">
@@ -1152,23 +1284,16 @@ export function OverviewView() {
                           <div className="min-w-0">
                             <div className="flex items-center gap-2">
                               {toneIcon(evt.tone)}
-                              <p className={cn('truncate text-sm', toneClass(evt.tone))}>
-                                {evt.title}
-                              </p>
+                              <p className={cn('truncate text-sm', toneClass(evt.tone))}>{evt.title}</p>
                             </div>
                             <p className="mt-1 text-xs text-text-secondary">
-                              <span className="font-mono">{evt.source}</span>
+                              <span className="industrial-data">{evt.source}</span>
                               {evt.metadata ? (
-                                <span className="font-mono text-text-tertiary">
-                                  {' '}
-                                  | {evt.metadata}
-                                </span>
+                                <span className="industrial-data text-text-tertiary"> | {evt.metadata}</span>
                               ) : null}
                             </p>
                           </div>
-                          <span className="industrial-data text-xs text-text-secondary">
-                            {clock(evt.timestamp)}
-                          </span>
+                          <span className="industrial-data text-xs text-text-secondary">{clock(evt.timestamp)}</span>
                         </div>
                       </div>
                     </li>
@@ -1179,42 +1304,9 @@ export function OverviewView() {
           </div>
 
           <aside className="space-y-16 xl:col-span-4">
-            <section>
-              <p className="industrial-label">Services Requiring Attention</p>
-              {model.attention.length === 0 ? (
-                <div className="mt-6 border-t border-border-muted pt-6">
-                  <p className="text-sm text-text-primary">No services require immediate action</p>
-                  <p className="mt-1 text-sm text-text-secondary">
-                    Replica targets are currently met and no elevated failure pressure was detected.
-                  </p>
-                </div>
-              ) : (
-                <ul className="mt-6 divide-y divide-border-muted">
-                  {model.attention.map((service) => (
-                    <li key={service.id}>
-                      <button
-                        type="button"
-                        onClick={() => navigate('/services')}
-                        className="industrial-row w-full text-left focus-visible:outline-none"
-                      >
-                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1.2fr_0.6fr_0.8fr_1fr]">
-                          <p className="truncate text-sm text-text-primary">{service.name}</p>
-                          <p className="industrial-data text-xs text-text-secondary">
-                            {service.replicas}
-                          </p>
-                          <p className="text-xs text-state-danger">{service.state}</p>
-                          <p className="text-xs text-text-secondary">{service.issue}</p>
-                        </div>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </section>
-
-            <section>
-              <p className="industrial-label">Quick Actions</p>
-              <ul className="mt-6 divide-y divide-border-muted">
+            <section aria-labelledby="quick-actions-title">
+              <SectionHeading id="quick-actions-title" eyebrow="Quick Actions" title="Operator Shortcuts" />
+              <ul className="mt-6 divide-y divide-white/10 border-t border-white/10">
                 {[
                   {
                     id: 'q1',
@@ -1230,24 +1322,28 @@ export function OverviewView() {
                     label: 'Inspect Nodes',
                     detail: 'Review node availability',
                     onClick: () => navigate('/nodes'),
+                    disabled: false,
                   },
                   {
                     id: 'q3',
                     label: 'Review Services',
                     detail: 'Inspect replica drift',
                     onClick: () => navigate('/services'),
+                    disabled: false,
                   },
                   {
                     id: 'q4',
                     label: 'Open Incidents',
                     detail: 'Triage active incidents',
                     onClick: () => navigate('/incidents'),
+                    disabled: false,
                   },
                   {
                     id: 'q5',
-                    label: 'Audit Trail',
+                    label: 'Check Audit Trail',
                     detail: 'Inspect operator writes',
                     onClick: () => navigate('/audit'),
+                    disabled: false,
                   },
                 ].map((action) => (
                   <li key={action.id}>
@@ -1268,26 +1364,24 @@ export function OverviewView() {
               </ul>
             </section>
 
-            <section>
-              <p className="industrial-label">Diagnostics</p>
-              <dl className="mt-6 space-y-3 border-t border-border-muted pt-5">
+            <section aria-labelledby="diag-title">
+              <SectionHeading id="diag-title" eyebrow="Diagnostics Widget" title="Latest Run" />
+              <dl className={cn('mt-6 space-y-4 border-t border-white/10 pt-5', model.stale && 'opacity-40')}>
                 <div className="flex items-center justify-between gap-4">
                   <dt className="industrial-label">Status</dt>
                   <dd
                     className={cn(
                       'industrial-data text-sm',
-                      model.diagnostics.status === 'Degraded'
+                      model.diagnostics.status === 'Degraded' || model.diagnostics.status === 'Offline'
                         ? 'text-state-danger'
-                        : model.diagnostics.status === 'Offline'
-                          ? 'text-text-secondary'
-                          : 'text-text-primary',
+                        : 'text-text-primary',
                     )}
                   >
                     {model.diagnostics.status}
                   </dd>
                 </div>
                 <div className="flex items-center justify-between gap-4">
-                  <dt className="industrial-label">Last Run</dt>
+                  <dt className="industrial-label">Last run</dt>
                   <dd className="industrial-data text-sm text-text-secondary">
                     {model.diagnostics.lastRun
                       ? relativeTime(new Date(model.diagnostics.lastRun).toISOString())
@@ -1306,27 +1400,38 @@ export function OverviewView() {
                     {model.diagnostics.findingsCount}
                   </dd>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void run()
+                  }}
+                  disabled={!canRunDiagnostics}
+                  className={cn('industrial-action pt-1', !canRunDiagnostics && 'cursor-not-allowed opacity-35')}
+                >
+                  <DiagnosticsIcon className="h-3.5 w-3.5" />
+                  Rerun Diagnostics
+                </button>
               </dl>
             </section>
 
-            <section>
-              <p className="industrial-label">Cluster Posture</p>
-              <dl className="mt-6 space-y-3 border-t border-border-muted pt-5">
+            <section aria-labelledby="posture-title">
+              <SectionHeading id="posture-title" eyebrow="Cluster Posture" title="At-a-Glance" />
+              <dl className={cn('mt-6 space-y-4 border-t border-white/10 pt-5', model.stale && 'opacity-40')}>
                 {model.posture.map((item) => (
                   <div key={item.id} className="flex items-center justify-between gap-4">
                     <dt className="industrial-label">{item.label}</dt>
-                    <dd className={cn('industrial-data text-sm', toneClass(item.tone))}>
-                      {item.value}
-                    </dd>
+                    <dd className={cn('industrial-data text-sm', toneClass(item.tone))}>{item.value}</dd>
                   </div>
                 ))}
               </dl>
             </section>
 
-            <section>
-              <p className="industrial-label">Guidance</p>
-              <div className="mt-6 border-t border-border-muted pt-5">
-                <p className={cn('text-sm', toneClass(model.healthTone))}>{model.guidance.title}</p>
+            <section aria-labelledby="guidance-title">
+              <SectionHeading id="guidance-title" eyebrow="Guidance" title="Next Steps" />
+              <div className="mt-6 border-t border-white/10 pt-5">
+                <p className={cn('text-sm', model.disconnected ? 'text-state-danger' : 'text-text-primary')}>
+                  {model.guidance.title}
+                </p>
                 <p className="mt-2 text-sm leading-relaxed text-text-secondary">
                   {model.guidance.description}
                 </p>

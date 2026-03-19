@@ -40,7 +40,7 @@ export function GrafanaEmbed({ panelId, title, subtitle, height = 280, vars }: G
           <p className="mt-1 text-xs text-text-tertiary">{grafanaProvisionNote()}</p>
         </div>
       ) : (
-        <div className={cn('mt-4 relative overflow-hidden border border-border-muted')}>
+        <div className={cn('mt-4 relative overflow-hidden')}>
           <iframe
             title={title}
             src={src}

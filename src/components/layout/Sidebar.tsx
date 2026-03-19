@@ -1,9 +1,9 @@
 import type { SVGProps } from 'react'
-import { NavLink } from 'react-router-dom'
-import { relativeTime } from '../../lib/utils'
+import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useClusterStore } from '../../store/clusterStore'
 import {
   AuditIcon,
+  ChevronDownIcon,
   DiagnosticsIcon,
   IncidentIcon,
   NetworkIcon,
@@ -21,49 +21,101 @@ interface SidebarProps {
   onClose: () => void
 }
 
+type NavGroup = 'Cluster' | 'Workloads' | 'Infrastructure' | 'Security & Config' | 'Operations'
+
 interface NavItem {
   to: string
   label: string
+  group: NavGroup
+  description: string
   icon: (props: SVGProps<SVGSVGElement>) => JSX.Element
 }
 
-interface NavGroup {
-  label: string
-  items: NavItem[]
-}
+const GROUP_ORDER: NavGroup[] = [
+  'Cluster',
+  'Workloads',
+  'Infrastructure',
+  'Security & Config',
+  'Operations',
+]
 
-const NAV_GROUPS: NavGroup[] = [
+const NAV_ITEMS: NavItem[] = [
   {
-    label: 'Cluster',
-    items: [{ to: '/', label: 'Overview', icon: OverviewIcon }],
+    to: '/',
+    label: 'Overview',
+    group: 'Cluster',
+    description: 'Health, replica status, and node connectivity in one view.',
+    icon: OverviewIcon,
   },
   {
-    label: 'Workloads',
-    items: [
-      { to: '/stacks', label: 'Stacks', icon: StackIcon },
-      { to: '/services', label: 'Services', icon: ServiceIcon },
-      { to: '/tasks', label: 'Tasks', icon: TaskIcon },
-    ],
+    to: '/diagnostics',
+    label: 'Diagnostics',
+    group: 'Operations',
+    description: 'Run checks, inspect findings, and export current diagnostics.',
+    icon: DiagnosticsIcon,
   },
   {
-    label: 'Infrastructure',
-    items: [
-      { to: '/nodes', label: 'Nodes', icon: NodeIcon },
-      { to: '/networks', label: 'Networks', icon: NetworkIcon },
-      { to: '/volumes', label: 'Volumes', icon: VolumeIcon },
-    ],
+    to: '/incidents',
+    label: 'Incidents',
+    group: 'Operations',
+    description: 'Triage active incidents and coordinate mitigation flow.',
+    icon: IncidentIcon,
   },
   {
-    label: 'Security & Config',
-    items: [{ to: '/secrets', label: 'Secrets / Configs', icon: SecretIcon }],
+    to: '/audit',
+    label: 'Audit Trail',
+    group: 'Operations',
+    description: 'Review write operations, actors, and reconciliation history.',
+    icon: AuditIcon,
   },
   {
-    label: 'Operations',
-    items: [
-      { to: '/diagnostics', label: 'Diagnostics', icon: DiagnosticsIcon },
-      { to: '/incidents', label: 'Incidents', icon: IncidentIcon },
-      { to: '/audit', label: 'Audit Trail', icon: AuditIcon },
-    ],
+    to: '/stacks',
+    label: 'Stacks',
+    group: 'Workloads',
+    description: 'Inspect stack health and deployment topology.',
+    icon: StackIcon,
+  },
+  {
+    to: '/services',
+    label: 'Services',
+    group: 'Workloads',
+    description: 'Track replica drift, rollout state, and restart pressure.',
+    icon: ServiceIcon,
+  },
+  {
+    to: '/tasks',
+    label: 'Tasks',
+    group: 'Workloads',
+    description: 'Debug task scheduling failures and container lifecycle signals.',
+    icon: TaskIcon,
+  },
+  {
+    to: '/nodes',
+    label: 'Nodes',
+    group: 'Infrastructure',
+    description: 'Monitor manager quorum, worker readiness, and host pressure.',
+    icon: NodeIcon,
+  },
+  {
+    to: '/networks',
+    label: 'Networks',
+    group: 'Infrastructure',
+    description: 'Validate overlay network integrity and service attachments.',
+    icon: NetworkIcon,
+  },
+  {
+    to: '/volumes',
+    label: 'Volumes',
+    group: 'Infrastructure',
+    description: 'Review persistent volume footprint and mount allocations.',
+    icon: VolumeIcon,
+  },
+  {
+    to: '/secrets',
+    label: 'Secrets / Configs',
+    group: 'Security & Config',
+    description: 'Audit secret and config references across workloads.',
+    icon: SecretIcon,
   },
 ]
 
@@ -72,24 +124,50 @@ function cn(...parts: Array<string | undefined | false>) {
 }
 
 export function Sidebar({ open, onClose }: SidebarProps) {
+  const location = useLocation()
+  const navigate = useNavigate()
   const swarm = useClusterStore((s) => s.swarm)
+  const stacks = useClusterStore((s) => s.stacks)
+  const nodes = useClusterStore((s) => s.nodes)
+  const tasks = useClusterStore((s) => s.tasks)
+  const services = useClusterStore((s) => s.services)
   const connectionState = useClusterStore((s) => s.connectionState)
   const error = useClusterStore((s) => s.error)
   const fetchAll = useClusterStore((s) => s.fetchAll)
-  const lastRefresh = useClusterStore((s) => s.lastRefresh)
 
   const mode = (swarm?.mode ?? 'demo').toUpperCase()
-  const clusterShort = swarm?.clusterID
-    ? `cluster/${swarm.clusterID.slice(0, 16)}`
-    : 'cluster/unset'
-  const endpoint = (import.meta.env.VITE_API_BASE as string | undefined) ?? '/api/v1'
+  const clusterShort = swarm?.clusterID ? `cluster/${swarm.clusterID.slice(0, 20)}` : 'cluster/unset'
   const disconnected = connectionState === 'disconnected' || Boolean(error)
-  const statusText = disconnected
-    ? 'Disconnected'
-    : connectionState === 'connecting'
-      ? 'Connecting'
-      : 'Connected'
-  const freshness = lastRefresh ? relativeTime(new Date(lastRefresh).toISOString()) : 'never synced'
+
+  const healthyStacks = stacks.filter((stack) => stack.runningServices >= stack.serviceCount).length
+  const readyNodes = nodes.filter((node) => node.state === 'ready').length
+  const runningTasks = tasks.filter((task) => task.currentState === 'running').length
+  const healthyReplicas = services.reduce((sum, service) => sum + service.runningTasks, 0)
+  const desiredReplicas = services.reduce((sum, service) => sum + service.desiredReplicas, 0)
+
+  const ratioInputs = [
+    stacks.length ? healthyStacks / stacks.length : 0,
+    nodes.length ? readyNodes / nodes.length : 0,
+    tasks.length ? runningTasks / tasks.length : 0,
+    desiredReplicas > 0 ? healthyReplicas / desiredReplicas : 0,
+  ]
+  const availableSignals = ratioInputs.filter((value) => value > 0)
+  const healthRatio = availableSignals.length
+    ? Math.round((availableSignals.reduce((sum, value) => sum + value, 0) / availableSignals.length) * 100)
+    : 0
+
+  const activeItem = NAV_ITEMS.find((item) => {
+    if (item.to === '/') return location.pathname === '/'
+    return location.pathname.startsWith(item.to)
+  })
+  const operatorTip =
+    activeItem?.description ??
+    'Use keyboard-driven navigation to jump between diagnostics, incidents, and audit.'
+
+  const groupedItems = GROUP_ORDER.map((group) => ({
+    label: group,
+    items: NAV_ITEMS.filter((item) => item.group === group),
+  })).filter((group) => group.items.length > 0)
 
   return (
     <>
@@ -105,27 +183,43 @@ export function Sidebar({ open, onClose }: SidebarProps) {
 
       <aside
         className={cn(
-          'fixed inset-y-0 left-0 z-40 flex w-[272px] flex-col border-r border-border-muted bg-sidebar transition-transform duration-200 lg:translate-x-0',
+          'fixed inset-y-0 left-0 z-40 flex w-[256px] flex-col border-r border-white/10 bg-sidebar transition-transform duration-200 lg:translate-x-0',
           open ? 'translate-x-0' : '-translate-x-full',
         )}
       >
-        <header className="border-b border-border-muted px-5 pb-5 pt-6">
-          <p className="font-heading text-[1.7rem] uppercase leading-none tracking-[0.05em] text-text-primary">
-            SwarmLens
-          </p>
-          <div className="mt-3 flex items-center gap-3">
-            <span className="industrial-label text-text-secondary">{mode}</span>
-            <span className="font-mono text-[11px] text-text-tertiary">{clusterShort}</span>
+        <header className="border-b border-white/10 px-5 pb-5 pt-6">
+          <p className="industrial-label text-text-secondary">Swarmlens</p>
+          <button
+            type="button"
+            onClick={() => {
+              navigate('/')
+              onClose()
+            }}
+            className="mt-3 flex w-full items-center justify-between border-b border-white/10 pb-2 text-left transition-opacity duration-150 hover:opacity-100 focus-visible:outline-none"
+            aria-label="Switch cluster context"
+          >
+            <span className="industrial-data text-[13px] text-text-primary">{clusterShort}</span>
+            <ChevronDownIcon className="h-4 w-4 text-text-secondary" />
+          </button>
+          <p className="mt-2 industrial-label text-text-tertiary">{mode} environment</p>
+
+          <div className="mt-4">
+            <p className="industrial-label text-text-secondary">
+              STACKS {healthyStacks}/{stacks.length || 0} | NODES {readyNodes}/{nodes.length || 0} | TASKS {runningTasks}/{tasks.length || 0}
+            </p>
+            <div className="mt-2 h-px w-full bg-white/10" aria-hidden="true">
+              <div className="h-px bg-white/45 transition-[width] duration-150" style={{ width: `${healthRatio}%` }} />
+            </div>
           </div>
         </header>
 
-        <nav className="flex-1 space-y-6 overflow-y-auto px-4 py-6" aria-label="Primary navigation">
-          {NAV_GROUPS.map((group) => (
-            <section key={group.label} aria-labelledby={`nav-group-${group.label}`}>
-              <h2 id={`nav-group-${group.label}`} className="industrial-label px-1">
-                {group.label}
-              </h2>
-              <ul className="mt-2 space-y-0.5">
+        <nav className="flex-1 overflow-y-auto px-3 py-4" aria-label="Primary navigation">
+          {groupedItems.map((group) => (
+            <section key={group.label} className="mt-2 first:mt-0" aria-label={group.label}>
+              {group.items.length >= 4 ? (
+                <p className="industrial-label px-2 pb-2 text-text-tertiary">{group.label}</p>
+              ) : null}
+              <ul className="space-y-1">
                 {group.items.map((item) => {
                   const Icon = item.icon
                   return (
@@ -134,15 +228,17 @@ export function Sidebar({ open, onClose }: SidebarProps) {
                         to={item.to}
                         end={item.to === '/'}
                         onClick={onClose}
-                        className={({ isActive }) =>
-                          cn(
-                            'industrial-nav-link flex items-center gap-2.5 text-[14px] tracking-[0.03em] focus-visible:outline-none',
-                            isActive && 'is-active',
-                          )
-                        }
+                        className={({ isActive }) => cn('sl-nav-item block px-2 py-2.5', isActive && 'is-active')}
                       >
-                        <Icon className="h-4 w-4 shrink-0 text-text-tertiary" />
-                        <span className="truncate">{item.label}</span>
+                        <div className="flex items-center gap-2.5">
+                          <Icon className="h-4 w-4 shrink-0 text-text-secondary transition-opacity duration-120" />
+                          <span className="truncate text-[14px] tracking-[0.03em] text-text-secondary transition-opacity duration-120">
+                            {item.label}
+                          </span>
+                        </div>
+                        <p className="sl-nav-description mt-1 pl-[26px] text-[11px] leading-[1.4] text-text-secondary">
+                          {item.description}
+                        </p>
                       </NavLink>
                     </li>
                   )
@@ -152,37 +248,23 @@ export function Sidebar({ open, onClose }: SidebarProps) {
           ))}
         </nav>
 
-        <footer className="border-t border-border-muted px-5 py-4">
-          <div className="flex items-center gap-2">
-            <span
-              aria-hidden="true"
-              className={cn(
-                'h-2 w-2 rounded-full',
-                disconnected
-                  ? 'bg-state-danger'
-                  : connectionState === 'connecting'
-                    ? 'bg-text-secondary'
-                    : 'bg-text-primary',
-              )}
-            />
-            <p className={cn('industrial-label', disconnected && 'text-state-danger')}>
-              {statusText}
-            </p>
-          </div>
-          <p className="mt-1 truncate font-mono text-[11px] text-text-tertiary">{clusterShort}</p>
-          <p className="mt-2 truncate font-mono text-xs text-text-secondary">{endpoint}</p>
-          <p className="mt-1 font-mono text-[11px] text-text-tertiary">Last sync {freshness}</p>
-
-          {disconnected && (
+        <footer className="border-t border-white/10 px-5 py-5">
+          {disconnected ? (
             <button
               type="button"
               onClick={() => {
                 void fetchAll()
               }}
-              className="industrial-action industrial-action-accent mt-3"
+              className="industrial-action industrial-action-accent w-full justify-start text-left"
             >
               Reconnect Cluster
             </button>
+          ) : (
+            <div>
+              <p className="industrial-label text-text-secondary">Operator Tip</p>
+              <p className="mt-2 text-[12px] leading-relaxed text-text-secondary">{operatorTip}</p>
+              <p className="mt-2 industrial-data text-[11px] text-text-tertiary">Shortcut: G then D</p>
+            </div>
           )}
         </footer>
       </aside>

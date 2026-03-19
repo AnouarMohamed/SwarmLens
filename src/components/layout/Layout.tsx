@@ -30,10 +30,15 @@ export function Layout() {
     <div className="min-h-screen bg-app text-text-primary">
       <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
-      <div className="min-h-screen lg:pl-[272px]">
+      <div className="min-h-screen lg:pl-[256px]">
         <Topbar onOpenSidebar={() => setSidebarOpen(true)} />
 
-        <main className={cn('pb-10', isOverview ? 'px-0 pt-0' : 'px-4 pt-4 sm:px-6')}>
+        <main
+          className={cn(
+            'transition-opacity duration-150',
+            isOverview ? 'px-0 pb-16 pt-0' : 'px-4 pb-12 pt-6 sm:px-6 lg:px-8',
+          )}
+        >
           <div className={cn(isOverview ? 'w-full' : 'mx-auto w-full max-w-shell')}>
             <Outlet />
           </div>

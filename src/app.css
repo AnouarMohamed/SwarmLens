@@ -7,13 +7,13 @@
 :root {
   --bg-app: #0a0a0b;
   --bg-sidebar: #0a0a0b;
-  --bg-surface-1: #0f0f10;
-  --bg-surface-2: #121214;
-  --bg-surface-3: #17171a;
+  --bg-surface-1: #0c0c0d;
+  --bg-surface-2: #101011;
+  --bg-surface-3: #151517;
 
-  --border-default: rgba(255, 255, 255, 0.15);
-  --border-muted: rgba(255, 255, 255, 0.12);
-  --border-card: rgba(255, 255, 255, 0.12);
+  --border-default: rgba(255, 255, 255, 0.1);
+  --border-muted: rgba(255, 255, 255, 0.1);
+  --border-card: rgba(255, 255, 255, 0.1);
 
   --text-primary: rgba(255, 255, 255, 0.95);
   --text-secondary: rgba(255, 255, 255, 0.45);
@@ -23,18 +23,18 @@
   --state-success: rgba(255, 255, 255, 0.95);
   --state-warning: #f5a623;
   --state-danger: #f5a623;
-  --state-info: rgba(255, 255, 255, 0.7);
+  --state-info: rgba(255, 255, 255, 0.45);
   --state-neutral: rgba(255, 255, 255, 0.45);
 
-  --focus-ring: rgba(255, 255, 255, 0.8);
+  --focus-ring: rgba(245, 166, 35, 0.9);
 
-  --font-ui: 'IBM Plex Sans', system-ui, sans-serif;
-  --font-head: 'Barlow Condensed', system-ui, sans-serif;
-  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
-  --font-label: 'Barlow Condensed', system-ui, sans-serif;
+  --font-ui: 'Barlow Condensed', 'IBM Plex Sans', system-ui, sans-serif;
+  --font-head: 'Barlow Condensed', 'IBM Plex Sans', system-ui, sans-serif;
+  --font-mono: 'Geist Mono', 'IBM Plex Mono', ui-monospace, monospace;
+  --font-label: 'Barlow Condensed', 'IBM Plex Sans', system-ui, sans-serif;
 
-  --radius-card: 14px;
-  --radius-panel: 16px;
+  --radius-card: 0;
+  --radius-panel: 0;
   --radius-pill: 9999px;
 
   /* Backward compatibility for existing view styles outside Overview. */
@@ -94,11 +94,11 @@ body {
 
 .industrial-label {
   font-family: var(--font-label);
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 600;
-  letter-spacing: 0.2em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
 }
 
 .industrial-data {
@@ -155,11 +155,11 @@ body {
   align-items: center;
   gap: 8px;
   padding-bottom: 2px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.25);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.18);
   font-family: var(--font-label);
   font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.16em;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--text-secondary);
   transition: opacity 120ms ease;
@@ -173,6 +173,56 @@ body {
 .industrial-action-accent {
   border-bottom-color: rgba(245, 166, 35, 0.55);
   color: #f5a623;
+}
+
+.sl-nav-item {
+  position: relative;
+  transition: background-color 120ms ease, opacity 120ms ease;
+}
+
+.sl-nav-item::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 2px;
+  background: #f5a623;
+  opacity: 0;
+  transform: translateX(-4px);
+  transition: opacity 120ms ease, transform 120ms ease;
+}
+
+.sl-nav-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.sl-nav-item:hover::before,
+.sl-nav-item:focus-visible::before,
+.sl-nav-item.is-active::before {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.sl-nav-item.is-active {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.sl-nav-item.is-active span,
+.sl-nav-item.is-active svg {
+  color: var(--text-primary);
+}
+
+.sl-nav-description {
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+  transition: max-height 120ms ease, opacity 120ms ease;
+}
+
+.sl-nav-item.is-active .sl-nav-description {
+  max-height: 80px;
+  opacity: 1;
 }
 
 .industrial-nav-link {
