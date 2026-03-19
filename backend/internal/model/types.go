@@ -25,15 +25,19 @@ type Principal struct {
 // ── Swarm cluster ─────────────────────────────────────────────────────────────
 
 type SwarmInfo struct {
-	ClusterID     string    `json:"clusterID"`
-	CreatedAt     time.Time `json:"createdAt"`
-	UpdatedAt     time.Time `json:"updatedAt"`
-	Managers      int       `json:"managers"`
-	Workers       int       `json:"workers"`
-	QuorumHealthy bool      `json:"quorumHealthy"`
-	RaftState     string    `json:"raftState"`
-	Mode          string    `json:"mode"`
-	WriteEnabled  bool      `json:"writeEnabled"`
+	ClusterID     string         `json:"clusterID"`
+	CreatedAt     time.Time      `json:"createdAt"`
+	UpdatedAt     time.Time      `json:"updatedAt"`
+	Managers      int            `json:"managers"`
+	Workers       int            `json:"workers"`
+	QuorumHealthy bool           `json:"quorumHealthy"`
+	RaftState     string         `json:"raftState"`
+	Mode          string         `json:"mode"`
+	WriteEnabled  bool           `json:"writeEnabled"`
+	Freshness     FreshnessState `json:"freshness"`
+	LastSyncAt    time.Time      `json:"lastSyncAt"`
+	SyncError     string         `json:"syncError,omitempty"`
+	Risk          RiskAssessment `json:"risk"`
 }
 
 // ── Nodes ─────────────────────────────────────────────────────────────────────
@@ -260,4 +264,100 @@ type Snapshot struct {
 	Configs  []Config
 	Managers int
 	Workers  int
+}
+
+// —— Operational Telemetry / AI ————————————————————————————————————————————————————————
+
+type FreshnessState string
+
+const (
+	FreshnessLive         FreshnessState = "live"
+	FreshnessStale        FreshnessState = "stale"
+	FreshnessDisconnected FreshnessState = "disconnected"
+)
+
+type RiskAssessment struct {
+	Score      float64   `json:"score"`
+	Confidence float64   `json:"confidence"`
+	Factors    []string  `json:"factors"`
+	Source     string    `json:"source"`
+	UpdatedAt  time.Time `json:"updatedAt"`
+}
+
+type OpsMetricPoint struct {
+	Timestamp      time.Time `json:"timestamp"`
+	HealthyRatio   float64   `json:"healthyRatio"`
+	ManagersOnline int       `json:"managersOnline"`
+	WorkersOnline  int       `json:"workersOnline"`
+	RunningTasks   int       `json:"runningTasks"`
+	FailedTasks    int       `json:"failedTasks"`
+	RestartCount   int       `json:"restartCount"`
+	Critical       int       `json:"critical"`
+	Warning        int       `json:"warning"`
+	RiskScore      float64   `json:"riskScore"`
+}
+
+type ServiceRisk struct {
+	Service       string   `json:"service"`
+	Score         float64  `json:"score"`
+	Reasons       []string `json:"reasons"`
+	Actionability string   `json:"actionability"`
+}
+
+type OpsMetrics struct {
+	Freshness   FreshnessState   `json:"freshness"`
+	LastUpdated time.Time        `json:"lastUpdated"`
+	Series      []OpsMetricPoint `json:"series"`
+	ServiceRisk []ServiceRisk    `json:"serviceRisk"`
+}
+
+type InsightAction struct {
+	Title         string `json:"title"`
+	Description   string `json:"description"`
+	EndpointHint  string `json:"endpointHint"`
+	Priority      int    `json:"priority"`
+	Actionability string `json:"actionability"`
+}
+
+type InsightHypothesis struct {
+	Title      string  `json:"title"`
+	Why        string  `json:"why"`
+	Confidence float64 `json:"confidence"`
+}
+
+type OpsInsights struct {
+	Summary        string              `json:"summary"`
+	Risk           RiskAssessment      `json:"risk"`
+	Freshness      FreshnessState      `json:"freshness"`
+	Hypotheses     []InsightHypothesis `json:"hypotheses"`
+	Actions        []InsightAction     `json:"actions"`
+	GeneratedAt    time.Time           `json:"generatedAt"`
+	Provider       string              `json:"provider"`
+	SourceStrategy string              `json:"sourceStrategy"`
+}
+
+// —— Write Actions ————————————————————————————————————————————————————————————————
+
+type ActionStatus string
+
+const (
+	ActionStatusSuccess ActionStatus = "success"
+	ActionStatusFailed  ActionStatus = "failed"
+	ActionStatusDryRun  ActionStatus = "dry_run"
+	ActionStatusBlocked ActionStatus = "blocked"
+)
+
+type ActionOutcome struct {
+	Action        string       `json:"action"`
+	Resource      string       `json:"resource"`
+	ResourceID    string       `json:"resourceID"`
+	Status        ActionStatus `json:"status"`
+	Mode          string       `json:"mode"`
+	Executed      bool         `json:"executed"`
+	Message       string       `json:"message"`
+	BlockedReason string       `json:"blockedReason,omitempty"`
+	Impact        string       `json:"impact,omitempty"`
+	Plan          []string     `json:"plan,omitempty"`
+	AuditID       string       `json:"auditID,omitempty"`
+	Timestamp     time.Time    `json:"timestamp"`
 }

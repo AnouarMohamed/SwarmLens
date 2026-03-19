@@ -25,11 +25,14 @@ func (d *deps) handleReadyz(w http.ResponseWriter, r *http.Request) {
 func (d *deps) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	var mem runtime.MemStats
 	runtime.ReadMemStats(&mem)
+	freshness, lastUpdated, _ := d.cache.Status(d.staleAfter())
 	writeOK(w, map[string]interface{}{
 		"uptime_seconds": time.Since(startTime).Seconds(),
 		"goroutines":     runtime.NumGoroutine(),
 		"heap_alloc_mb":  float64(mem.HeapAlloc) / 1024 / 1024,
 		"mode":           d.cfg.AppMode,
+		"freshness":      freshness,
+		"last_sync":      lastUpdated,
 	})
 }
 
@@ -43,11 +46,16 @@ func (d *deps) handleMetricsPrometheus(w http.ResponseWriter, r *http.Request) {
 }
 
 func (d *deps) handleRuntime(w http.ResponseWriter, r *http.Request) {
+	freshness, lastUpdated, lastErr := d.cache.Status(d.staleAfter())
 	writeOK(w, map[string]interface{}{
-		"mode":           d.cfg.AppMode,
-		"auth_enabled":   d.cfg.AuthEnabled,
-		"writes_enabled": d.cfg.WriteActionsEnabled,
-		"demo":           d.docker.IsDemo(),
+		"mode":               d.cfg.AppMode,
+		"auth_enabled":       d.cfg.AuthEnabled,
+		"writes_enabled":     d.cfg.WriteActionsEnabled,
+		"live_action_policy": d.cfg.LiveActionPolicy,
+		"demo":               d.docker.IsDemo(),
+		"freshness":          freshness,
+		"last_sync_at":       lastUpdated,
+		"last_sync_error":    lastErr,
 	})
 }
 

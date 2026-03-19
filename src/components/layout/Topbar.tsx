@@ -63,7 +63,8 @@ export function Topbar({ onOpenSidebar }: TopbarProps) {
     useClusterStore()
   const { run, running, findings } = useDiagnosticsStore()
 
-  const disconnected = connectionState === 'disconnected' || Boolean(error)
+  const disconnected =
+    connectionState === 'disconnected' || Boolean(error) || swarm?.freshness === 'disconnected'
   const mode = swarm?.mode?.toUpperCase() ?? 'DEMO'
   const clusterName = swarm?.clusterID ? `cluster/${swarm.clusterID.slice(0, 20)}` : 'cluster/unset'
 
@@ -85,9 +86,10 @@ export function Topbar({ onOpenSidebar }: TopbarProps) {
   })
 
   const freshness = useMemo(() => {
+    if (swarm?.lastSyncAt) return `Last sync ${relativeTime(swarm.lastSyncAt)}`
     if (!lastRefresh) return 'No successful sync yet'
     return `Last sync ${relativeTime(new Date(lastRefresh).toISOString())}`
-  }, [lastRefresh])
+  }, [swarm?.lastSyncAt, lastRefresh])
 
   const connectionLabel = disconnected ? 'Disconnected' : connectionState === 'connecting' ? 'Connecting' : 'Connected'
   const disableDiagnostics = running || disconnected

@@ -1,18 +1,5 @@
 import type { ReactNode } from 'react'
-import {
-  Area,
-  AreaChart,
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Legend,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts'
+import ReactECharts from 'echarts-for-react'
 
 type Datum = Record<string, number | string>
 
@@ -64,18 +51,37 @@ function ChartPanel({ title, subtitle, children }: PanelProps) {
   )
 }
 
-function tooltipStyle() {
+function baseOption(data: Datum[], xKey: string) {
   return {
-    backgroundColor: '#0a0a0b',
-    border: '1px solid rgba(255,255,255,0.15)',
-    color: 'rgba(255,255,255,0.95)',
-    borderRadius: 0,
+    animationDuration: 120,
+    grid: { top: 20, left: 40, right: 20, bottom: 36 },
+    tooltip: {
+      trigger: 'axis',
+      borderWidth: 1,
+      borderColor: 'rgba(255,255,255,0.15)',
+      backgroundColor: '#0A0A0B',
+      textStyle: { color: 'rgba(255,255,255,0.9)', fontSize: 11 },
+    },
+    legend: {
+      top: 0,
+      textStyle: { color: 'rgba(255,255,255,0.55)', fontSize: 11 },
+    },
+    xAxis: {
+      type: 'category',
+      data: data.map((row) => String(row[xKey] ?? '')),
+      boundaryGap: false,
+      axisLine: { lineStyle: { color: 'rgba(255,255,255,0.25)' } },
+      axisLabel: { color: 'rgba(255,255,255,0.45)', fontSize: 11 },
+      splitLine: { show: false },
+    },
+    yAxis: {
+      type: 'value',
+      axisLine: { show: false },
+      axisLabel: { color: 'rgba(255,255,255,0.45)', fontSize: 11 },
+      splitLine: { lineStyle: { color: 'rgba(255,255,255,0.1)' } },
+    },
   }
 }
-
-const gridStroke = 'rgba(255,255,255,0.1)'
-const axisStroke = 'rgba(255,255,255,0.35)'
-const tickColor = 'rgba(255,255,255,0.55)'
 
 export function GrafanaTimeSeries({
   title,
@@ -85,115 +91,73 @@ export function GrafanaTimeSeries({
   lines,
   yDomain = ['auto', 'auto'],
 }: TimeSeriesProps) {
+  const option = {
+    ...baseOption(data, xKey),
+    yAxis: {
+      ...(baseOption(data, xKey).yAxis as object),
+      min: yDomain[0] === 'auto' ? undefined : yDomain[0],
+      max: yDomain[1] === 'auto' ? undefined : yDomain[1],
+    },
+    series: lines.map((line) => ({
+      name: line.label,
+      type: 'line',
+      data: data.map((row) => Number(row[line.key] ?? 0)),
+      showSymbol: false,
+      smooth: true,
+      lineStyle: { color: line.color, width: line.strokeWidth ?? 2 },
+      itemStyle: { color: line.color },
+    })),
+  }
+
   return (
     <ChartPanel title={title} subtitle={subtitle}>
-      <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={data}>
-          <CartesianGrid stroke={gridStroke} strokeDasharray="2 5" vertical={false} />
-          <XAxis dataKey={xKey} stroke={axisStroke} tick={{ fontSize: 11, fill: tickColor }} />
-          <YAxis stroke={axisStroke} tick={{ fontSize: 11, fill: tickColor }} domain={yDomain} />
-          <Tooltip
-            contentStyle={tooltipStyle()}
-            labelStyle={{ color: 'rgba(255,255,255,0.7)' }}
-            itemStyle={{ color: 'rgba(255,255,255,0.95)' }}
-          />
-          <Legend
-            wrapperStyle={{
-              color: 'rgba(255,255,255,0.65)',
-              fontSize: 11,
-              letterSpacing: '0.04em',
-            }}
-          />
-          {lines.map((line) => (
-            <Line
-              key={line.key}
-              type="monotone"
-              dataKey={line.key}
-              name={line.label}
-              stroke={line.color}
-              dot={false}
-              strokeWidth={line.strokeWidth ?? 2}
-              isAnimationActive={false}
-              activeDot={{ r: 3, fill: line.color, stroke: 'transparent' }}
-            />
-          ))}
-        </LineChart>
-      </ResponsiveContainer>
+      <ReactECharts option={option} style={{ width: '100%', height: '100%' }} />
     </ChartPanel>
   )
 }
 
 export function GrafanaAreaSeries({ title, subtitle, data, xKey, areas }: AreaSeriesProps) {
+  const option = {
+    ...baseOption(data, xKey),
+    series: areas.map((area) => ({
+      name: area.label,
+      type: 'line',
+      data: data.map((row) => Number(row[area.key] ?? 0)),
+      showSymbol: false,
+      smooth: true,
+      lineStyle: { color: area.color, width: 2 },
+      areaStyle: { color: area.color, opacity: 0.18 },
+      itemStyle: { color: area.color },
+    })),
+  }
+
   return (
     <ChartPanel title={title} subtitle={subtitle}>
-      <ResponsiveContainer width="100%" height="100%">
-        <AreaChart data={data}>
-          <CartesianGrid stroke={gridStroke} strokeDasharray="2 5" vertical={false} />
-          <XAxis dataKey={xKey} stroke={axisStroke} tick={{ fontSize: 11, fill: tickColor }} />
-          <YAxis stroke={axisStroke} tick={{ fontSize: 11, fill: tickColor }} />
-          <Tooltip
-            contentStyle={tooltipStyle()}
-            labelStyle={{ color: 'rgba(255,255,255,0.7)' }}
-            itemStyle={{ color: 'rgba(255,255,255,0.95)' }}
-          />
-          <Legend
-            wrapperStyle={{
-              color: 'rgba(255,255,255,0.65)',
-              fontSize: 11,
-              letterSpacing: '0.04em',
-            }}
-          />
-          {areas.map((area) => (
-            <Area
-              key={area.key}
-              type="monotone"
-              dataKey={area.key}
-              name={area.label}
-              stroke={area.color}
-              fill={area.color}
-              fillOpacity={0.18}
-              strokeWidth={2}
-              isAnimationActive={false}
-            />
-          ))}
-        </AreaChart>
-      </ResponsiveContainer>
+      <ReactECharts option={option} style={{ width: '100%', height: '100%' }} />
     </ChartPanel>
   )
 }
 
 export function GrafanaBarSeries({ title, subtitle, data, xKey, bars }: BarSeriesProps) {
+  const base = baseOption(data, xKey)
+  const option = {
+    ...base,
+    xAxis: {
+      ...(base.xAxis as object),
+      boundaryGap: true,
+    },
+    series: bars.map((bar) => ({
+      name: bar.label,
+      type: 'bar',
+      barMaxWidth: 18,
+      data: data.map((row) => Number(row[bar.key] ?? 0)),
+      itemStyle: { color: bar.color },
+    })),
+  }
+
   return (
     <ChartPanel title={title} subtitle={subtitle}>
-      <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={data}>
-          <CartesianGrid stroke={gridStroke} strokeDasharray="2 5" vertical={false} />
-          <XAxis dataKey={xKey} stroke={axisStroke} tick={{ fontSize: 11, fill: tickColor }} />
-          <YAxis stroke={axisStroke} tick={{ fontSize: 11, fill: tickColor }} />
-          <Tooltip
-            contentStyle={tooltipStyle()}
-            labelStyle={{ color: 'rgba(255,255,255,0.7)' }}
-            itemStyle={{ color: 'rgba(255,255,255,0.95)' }}
-          />
-          <Legend
-            wrapperStyle={{
-              color: 'rgba(255,255,255,0.65)',
-              fontSize: 11,
-              letterSpacing: '0.04em',
-            }}
-          />
-          {bars.map((bar) => (
-            <Bar
-              key={bar.key}
-              dataKey={bar.key}
-              name={bar.label}
-              fill={bar.color}
-              isAnimationActive={false}
-              maxBarSize={18}
-            />
-          ))}
-        </BarChart>
-      </ResponsiveContainer>
+      <ReactECharts option={option} style={{ width: '100%', height: '100%' }} />
     </ChartPanel>
   )
 }

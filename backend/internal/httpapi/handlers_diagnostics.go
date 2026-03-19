@@ -1,7 +1,9 @@
 package httpapi
 
 import (
+	"context"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -60,8 +62,21 @@ func (d *deps) handleDiagnosticsGet(w http.ResponseWriter, r *http.Request) {
 }
 
 func (d *deps) runDiagnostics() []model.Finding {
+	_ = d.ensureSnapshotFresh(context.Background(), false)
 	snap, _ := d.cache.GetSnapshot()
 	findings := d.engine.Run(snap)
+	critical := 0
+	warning := 0
+	for _, f := range findings {
+		switch strings.ToLower(string(f.Severity)) {
+		case "critical":
+			critical++
+		case "high", "medium":
+			warning++
+		}
+	}
+	d.cache.SetFindingsSummary(critical, warning)
+	d.cache.SetRisk(d.predictRisk(context.Background(), snap))
 	findingsMu.Lock()
 	lastFindings = findings
 	lastRun = time.Now()

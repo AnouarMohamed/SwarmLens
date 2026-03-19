@@ -4,6 +4,7 @@
 export type Role = 'viewer' | 'operator' | 'admin'
 export type AppMode = 'dev' | 'demo' | 'prod'
 export type Severity = 'critical' | 'high' | 'medium' | 'low' | 'info'
+export type FreshnessState = 'live' | 'stale' | 'disconnected'
 
 // ── Swarm ─────────────────────────────────────────────────────────────────────
 export interface SwarmInfo {
@@ -16,6 +17,18 @@ export interface SwarmInfo {
   raftState: 'healthy' | 'degraded' | 'single' | 'unknown'
   mode: AppMode
   writeEnabled: boolean
+  freshness: FreshnessState
+  lastSyncAt: string
+  syncError?: string
+  risk: RiskAssessment
+}
+
+export interface RiskAssessment {
+  score: number
+  confidence: number
+  factors: string[]
+  source: string
+  updatedAt: string
 }
 
 // ── Nodes ─────────────────────────────────────────────────────────────────────
@@ -228,4 +241,73 @@ export interface ItemResponse<T> {
 export interface APIError {
   error: string
   code: string
+}
+
+export interface OpsMetricPoint {
+  timestamp: string
+  healthyRatio: number
+  managersOnline: number
+  workersOnline: number
+  runningTasks: number
+  failedTasks: number
+  restartCount: number
+  critical: number
+  warning: number
+  riskScore: number
+}
+
+export interface ServiceRisk {
+  service: string
+  score: number
+  reasons: string[]
+  actionability: 'immediate' | 'soon' | 'monitor' | string
+}
+
+export interface OpsMetrics {
+  freshness: FreshnessState
+  lastUpdated: string
+  series: OpsMetricPoint[]
+  serviceRisk: ServiceRisk[]
+}
+
+export interface InsightHypothesis {
+  title: string
+  why: string
+  confidence: number
+}
+
+export interface InsightAction {
+  title: string
+  description: string
+  endpointHint: string
+  priority: number
+  actionability: 'immediate' | 'soon' | 'monitor' | string
+}
+
+export interface OpsInsights {
+  summary: string
+  risk: RiskAssessment
+  freshness: FreshnessState
+  hypotheses: InsightHypothesis[]
+  actions: InsightAction[]
+  generatedAt: string
+  provider: string
+  sourceStrategy: string
+}
+
+export type ActionStatus = 'success' | 'failed' | 'dry_run' | 'blocked'
+
+export interface ActionOutcome {
+  action: string
+  resource: string
+  resourceID: string
+  status: ActionStatus
+  mode: string
+  executed: boolean
+  message: string
+  blockedReason?: string
+  impact?: string
+  plan?: string[]
+  auditID?: string
+  timestamp: string
 }

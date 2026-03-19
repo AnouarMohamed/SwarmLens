@@ -1,5 +1,5 @@
 ﻿
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ComponentType, SVGProps } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { GrafanaEmbed } from '../../components/charts/GrafanaEmbed'
@@ -15,6 +15,7 @@ import { relativeTime } from '../../lib/utils'
 import { useClusterStore } from '../../store/clusterStore'
 import { useDiagnosticsStore } from '../../store/diagnosticsStore'
 import { useIncidentStore } from '../../store/incidentStore'
+import { useOpsStore } from '../../store/opsStore'
 import type { Severity, SwarmEvent } from '../../types'
 import {
   ActivityIcon,
@@ -30,7 +31,7 @@ import {
 } from '../../components/ui/icons'
 
 type Tone = 'primary' | 'attention' | 'muted'
-type Scenario = 'healthy' | 'degraded' | 'disconnected'
+type Scenario = 'healthy' | 'degraded' | 'incident-burst' | 'recovery' | 'disconnected'
 type IconComponent = ComponentType<SVGProps<SVGSVGElement>>
 
 interface Metric {
@@ -223,6 +224,79 @@ function scenarioModel(kind: Scenario, endpoint: string): OverviewModel {
       tone: kind === 'disconnected' ? 'muted' : 'primary',
     },
   ]
+
+  if (kind === 'incident-burst') {
+    const degraded = scenarioModel('degraded', endpoint)
+    return {
+      ...degraded,
+      summary: 'Incident burst detected. 4 services entered failure state and diagnostics pressure is rising.',
+      metrics: degraded.metrics.map((metric) =>
+        metric.id === 'findings'
+          ? {
+              ...metric,
+              value: '12',
+              supporting: '4 critical / 8 warning',
+              note: 'Incident burst in the last 15m',
+              tone: 'attention',
+            }
+          : metric,
+      ),
+      diagnostics: {
+        ...degraded.diagnostics,
+        status: 'Degraded',
+        findingsCount: 12,
+      },
+      telemetrySeed: {
+        ...degraded.telemetrySeed,
+        criticalFindings: 4,
+        warningFindings: 8,
+      },
+      guidance: {
+        title: 'Escalate and contain incident burst',
+        description: 'Multiple services are failing simultaneously; prioritize containment and ownership.',
+        steps: ['Open incident bridge.', 'Stabilize quorum and failed services.', 'Run diagnostics every 5 minutes until clear.'],
+      },
+    }
+  }
+
+  if (kind === 'recovery') {
+    const healthy = scenarioModel('healthy', endpoint)
+    return {
+      ...healthy,
+      summary: 'Recovery in progress. Critical findings cleared and replica health is returning to baseline.',
+      metrics: healthy.metrics.map((metric) =>
+        metric.id === 'health'
+          ? {
+              ...metric,
+              value: 'Healthy',
+              supporting: '23/24 replicas healthy',
+              note: 'Recovered from degraded state 11m ago',
+            }
+          : metric.id === 'findings'
+            ? {
+                ...metric,
+                value: '1',
+                supporting: '0 critical / 1 warning',
+                note: 'Monitoring post-recovery drift',
+              }
+            : metric,
+      ),
+      diagnostics: {
+        ...healthy.diagnostics,
+        status: 'Recovering',
+        findingsCount: 1,
+      },
+      telemetrySeed: {
+        ...healthy.telemetrySeed,
+        warningFindings: 1,
+      },
+      guidance: {
+        title: 'Recovery watch window active',
+        description: 'Core signals are back to nominal, but continue monitoring for regression.',
+        steps: ['Keep heightened telemetry refresh cadence.', 'Validate service rollouts.', 'Close incidents after two stable windows.'],
+      },
+    }
+  }
 
   if (kind === 'disconnected') {
     return {
@@ -592,9 +666,18 @@ export function OverviewView() {
     lastRefresh,
     fetchAll,
   } = useClusterStore()
-  const { findings, fetch: fetchDiagnostics, run, running, lastRun, lastDurationMs, error: findingsError } =
+  const { findings, fetch: fetchDiagnostics, running, lastRun, lastDurationMs, error: findingsError } =
     useDiagnosticsStore()
   const { incidents, fetch: fetchIncidents, loading: incidentsLoading } = useIncidentStore()
+  const {
+    metrics: opsMetrics,
+    insights: opsInsights,
+    refresh: refreshOps,
+    runAction,
+    actionLog,
+    loading: opsLoading,
+  } = useOpsStore()
+  const [actionNotice, setActionNotice] = useState<string | null>(null)
 
   const prevRunningTasksRef = useRef<number | null>(null)
   const prevRefreshRef = useRef(0)
@@ -602,7 +685,8 @@ export function OverviewView() {
   useEffect(() => {
     void fetchDiagnostics()
     void fetchIncidents()
-  }, [fetchDiagnostics, fetchIncidents])
+    void refreshOps()
+  }, [fetchDiagnostics, fetchIncidents, refreshOps])
 
   const liveRunningTasks = tasks.filter((task) => task.currentState === 'running').length
   const liveFailedTasks = tasks.filter(
@@ -618,7 +702,8 @@ export function OverviewView() {
 
   const taskDelta =
     prevRunningTasksRef.current === null ? 0 : liveRunningTasks - prevRunningTasksRef.current
-  const disconnected = connectionState === 'disconnected' || Boolean(error)
+  const disconnected =
+    connectionState === 'disconnected' || Boolean(error) || swarm?.freshness === 'disconnected'
 
   const hasData =
     Boolean(swarm) ||
@@ -632,7 +717,11 @@ export function OverviewView() {
   const endpoint = (import.meta.env.VITE_API_BASE as string | undefined) ?? '/api/v1'
   const forcedScenario = searchParams.get('scenario')
   const scenarioKind: Scenario | null =
-    forcedScenario === 'healthy' || forcedScenario === 'degraded' || forcedScenario === 'disconnected'
+    forcedScenario === 'healthy' ||
+    forcedScenario === 'degraded' ||
+    forcedScenario === 'incident-burst' ||
+    forcedScenario === 'recovery' ||
+    forcedScenario === 'disconnected'
       ? forcedScenario
       : !hasData && !loading
         ? disconnected
@@ -667,7 +756,7 @@ export function OverviewView() {
     ).length
     const warningFindings = effectiveFindings.filter((finding) => finding.severity === 'medium').length
     const findingsCount = effectiveFindings.length
-    const stale = disconnected || !lastRefresh || Date.now() - lastRefresh > 120_000
+    const stale = disconnected || swarm?.freshness === 'stale' || !lastRefresh || Date.now() - lastRefresh > 120_000
     const unknown = disconnected && !lastRefresh && !hasData
     const degraded =
       disconnected || criticalFindings > 0 || unavailableNodes > 0 || unhealthyServices.length > 0
@@ -935,31 +1024,57 @@ export function OverviewView() {
     taskDelta,
   ])
 
-  const telemetry = useMemo(
-    () =>
-      buildOverviewTelemetry({
-        runningTasks: model.telemetrySeed.runningTasks,
-        failedTasks: model.telemetrySeed.failedTasks,
-        managersOnline: model.telemetrySeed.managersOnline,
-        workersOnline: model.telemetrySeed.workersOnline,
-        criticalFindings: model.telemetrySeed.criticalFindings,
-        warningFindings: model.telemetrySeed.warningFindings,
-        disconnected: model.disconnected,
-        degraded: model.telemetrySeed.degraded,
-      }),
-    [model],
-  )
+  const telemetry = useMemo(() => {
+    if (opsMetrics?.series?.length) {
+      return {
+        throughput: opsMetrics.series.map((point) => ({
+          time: clock(point.timestamp),
+          running: point.runningTasks,
+          failed: point.failedTasks,
+          critical: point.critical,
+          warning: point.warning,
+          risk: Number(point.riskScore.toFixed(3)),
+          restarts: point.restartCount,
+        })),
+        nodeHealth: opsMetrics.series.map((point) => ({
+          time: clock(point.timestamp),
+          managers: point.managersOnline,
+          workers: point.workersOnline,
+          healthyRatio: Number((point.healthyRatio * 100).toFixed(1)),
+        })),
+      }
+    }
+
+    return buildOverviewTelemetry({
+      runningTasks: model.telemetrySeed.runningTasks,
+      failedTasks: model.telemetrySeed.failedTasks,
+      managersOnline: model.telemetrySeed.managersOnline,
+      workersOnline: model.telemetrySeed.workersOnline,
+      criticalFindings: model.telemetrySeed.criticalFindings,
+      warningFindings: model.telemetrySeed.warningFindings,
+      disconnected: model.disconnected,
+      degraded: model.telemetrySeed.degraded,
+    })
+  }, [opsMetrics, model])
 
   const findingDistribution = useMemo(() => {
+    if (opsMetrics?.series?.length) {
+      const latest = opsMetrics.series[opsMetrics.series.length - 1]
+      const rows = [
+        { bucket: 'Critical', findings: latest?.critical ?? 0 },
+        { bucket: 'Warning', findings: latest?.warning ?? 0 },
+      ]
+      return rows.every((row) => row.findings === 0) ? [{ bucket: 'None', findings: 0 }] : rows
+    }
     const rows = [
       { bucket: 'Critical', findings: model.telemetrySeed.criticalFindings },
       { bucket: 'Warning', findings: model.telemetrySeed.warningFindings },
     ]
     return rows.every((row) => row.findings === 0) ? [{ bucket: 'None', findings: 0 }] : rows
-  }, [model.telemetrySeed.criticalFindings, model.telemetrySeed.warningFindings])
+  }, [opsMetrics, model.telemetrySeed.criticalFindings, model.telemetrySeed.warningFindings])
 
   const grafana = grafanaConfig()
-  const canRunDiagnostics = !model.disconnected && !running
+  const canRunDiagnostics = !model.disconnected && !running && !opsLoading
   const activeScenario: Scenario =
     scenarioKind ?? (model.disconnected ? 'disconnected' : model.healthLabel === 'Degraded' ? 'degraded' : 'healthy')
 
@@ -974,6 +1089,47 @@ export function OverviewView() {
     params.delete('scenario')
     const query = params.toString()
     navigate({ pathname: '/', search: query ? `?${query}` : '' })
+  }
+
+  async function runDiagnosticsAction() {
+    const outcome = await runAction({ action: 'diagnostics.run' })
+    if (outcome) {
+      setActionNotice(`${outcome.status.toUpperCase()}: ${outcome.message}`)
+      await fetchDiagnostics()
+      await refreshOps()
+    }
+  }
+
+  async function refreshTelemetryAction() {
+    const outcome = await runAction({ action: 'telemetry.refresh' })
+    if (outcome) {
+      setActionNotice(`${outcome.status.toUpperCase()}: ${outcome.message}`)
+      await fetchAll()
+      await refreshOps()
+    }
+  }
+
+  function triggerInsightAction(endpointHint: string) {
+    if (endpointHint.includes('/diagnostics/run')) {
+      void runDiagnosticsAction()
+      return
+    }
+    if (endpointHint.includes('telemetry.refresh')) {
+      void refreshTelemetryAction()
+      return
+    }
+    if (endpointHint.includes('/services')) {
+      navigate('/services')
+      return
+    }
+    if (endpointHint.includes('/incidents')) {
+      navigate('/incidents')
+      return
+    }
+    if (endpointHint.includes('/nodes')) {
+      navigate('/nodes')
+      return
+    }
   }
 
   if (loading && !hasData && !scenarioKind) return <OverviewSkeleton />
@@ -1008,6 +1164,13 @@ export function OverviewView() {
           <p className={cn('mt-2 industrial-label', model.healthLabel === 'Degraded' && 'text-state-danger')}>
             {model.environment} · {model.healthLabel} · {model.freshness}
           </p>
+          {actionNotice ? (
+            <p className="mt-2 text-xs text-text-secondary">{actionNotice}</p>
+          ) : actionLog.length > 0 ? (
+            <p className="mt-2 text-xs text-text-secondary">
+              Last action: {actionLog[0].action} · {actionLog[0].status}
+            </p>
+          ) : null}
           <p className="mt-1 industrial-data text-xs text-text-tertiary">{model.endpoint}</p>
 
           {model.disconnected ? (
@@ -1045,13 +1208,13 @@ export function OverviewView() {
             </div>
           ) : (
             <div className="mt-8 flex flex-wrap items-center gap-8">
-              <button
-                type="button"
-                onClick={() => {
-                  void run()
-                }}
-                disabled={!canRunDiagnostics}
-                className={cn(
+                <button
+                  type="button"
+                  onClick={() => {
+                    void runDiagnosticsAction()
+                  }}
+                  disabled={!canRunDiagnostics}
+                  className={cn(
                   'industrial-action industrial-action-accent',
                   !canRunDiagnostics && 'cursor-not-allowed opacity-35',
                 )}
@@ -1061,13 +1224,13 @@ export function OverviewView() {
               <button
                 type="button"
                 onClick={() => {
-                  void fetchAll()
+                  void refreshTelemetryAction()
                 }}
-                disabled={loading}
-                className={cn('industrial-action', loading && 'cursor-not-allowed opacity-35')}
+                disabled={loading || opsLoading}
+                className={cn('industrial-action', (loading || opsLoading) && 'cursor-not-allowed opacity-35')}
               >
                 <RefreshIcon className="h-3.5 w-3.5" />
-                {loading ? 'Refreshing' : 'Refresh Telemetry'}
+                {loading || opsLoading ? 'Refreshing' : 'Refresh Telemetry'}
               </button>
               <button type="button" onClick={() => navigate('/audit')} className="industrial-action">
                 Open Audit Trail
@@ -1182,12 +1345,29 @@ export function OverviewView() {
                     { key: 'workers', label: 'Workers', color: 'rgba(255,255,255,0.8)' },
                   ]}
                 />
+                <GrafanaTimeSeries
+                  title="Risk Trajectory"
+                  subtitle="Predictive risk score trend"
+                  data={telemetry.throughput}
+                  xKey="time"
+                  lines={[{ key: 'risk', label: 'Risk Score', color: '#F5A623' }]}
+                  yDomain={[0, 1]}
+                />
+              </div>
+              <div className="mt-10 grid grid-cols-1 gap-10 xl:grid-cols-2">
                 <GrafanaBarSeries
                   title="Current Finding Mix"
                   subtitle="Severity split in the current window"
                   data={findingDistribution}
                   xKey="bucket"
                   bars={[{ key: 'findings', label: 'Findings', color: '#F5A623' }]}
+                />
+                <GrafanaTimeSeries
+                  title="Task Restarts"
+                  subtitle="Restart pressure trend"
+                  data={telemetry.throughput}
+                  xKey="time"
+                  lines={[{ key: 'restarts', label: 'Restarts', color: 'rgba(255,255,255,0.78)' }]}
                 />
               </div>
             </>
@@ -1248,7 +1428,7 @@ export function OverviewView() {
                   <button
                     type="button"
                     onClick={() => {
-                      void run()
+                      void runDiagnosticsAction()
                     }}
                     disabled={!canRunDiagnostics}
                     className={cn('industrial-action mt-3', !canRunDiagnostics && 'cursor-not-allowed opacity-35')}
@@ -1338,33 +1518,42 @@ export function OverviewView() {
                     label: running ? 'Running Diagnostics' : 'Run Diagnostics',
                     detail: 'Execute health checks',
                     onClick: () => {
-                      void run()
+                      void runDiagnosticsAction()
                     },
-                    disabled: !canRunDiagnostics,
+                    disabled: !canRunDiagnostics || opsLoading,
                   },
                   {
                     id: 'q2',
+                    label: 'Refresh Telemetry',
+                    detail: 'Pull latest inventory and events',
+                    onClick: () => {
+                      void refreshTelemetryAction()
+                    },
+                    disabled: opsLoading,
+                  },
+                  {
+                    id: 'q3',
                     label: 'Inspect Nodes',
                     detail: 'Review node availability',
                     onClick: () => navigate('/nodes'),
                     disabled: false,
                   },
                   {
-                    id: 'q3',
+                    id: 'q4',
                     label: 'Review Services',
                     detail: 'Inspect replica drift',
                     onClick: () => navigate('/services'),
                     disabled: false,
                   },
                   {
-                    id: 'q4',
+                    id: 'q5',
                     label: 'Open Incidents',
                     detail: 'Triage active incidents',
                     onClick: () => navigate('/incidents'),
                     disabled: false,
                   },
                   {
-                    id: 'q5',
+                    id: 'q6',
                     label: 'Check Audit Trail',
                     detail: 'Inspect operator writes',
                     onClick: () => navigate('/audit'),
@@ -1428,7 +1617,7 @@ export function OverviewView() {
                 <button
                   type="button"
                   onClick={() => {
-                    void run()
+                    void runDiagnosticsAction()
                   }}
                   disabled={!canRunDiagnostics}
                   className={cn('industrial-action pt-1', !canRunDiagnostics && 'cursor-not-allowed opacity-35')}
@@ -1473,6 +1662,65 @@ export function OverviewView() {
               </div>
             </section>
 
+            <section aria-labelledby="ai-insights-title">
+              <SectionHeading id="ai-insights-title" eyebrow="AI Insights" title="Copilot Brief" />
+              <div className="mt-6 border-t border-white/10 pt-5">
+                <p className="text-sm text-text-primary">
+                  {opsInsights?.summary ?? 'Operational insights are loading...'}
+                </p>
+                {opsInsights ? (
+                  <>
+                    <p className="mt-2 industrial-label text-text-secondary">
+                      Risk {opsInsights.risk.score.toFixed(2)} · Confidence {(opsInsights.risk.confidence * 100).toFixed(0)}% · {opsInsights.provider.toUpperCase()}
+                    </p>
+                    <ul className="mt-4 space-y-2">
+                      {opsInsights.hypotheses.slice(0, 3).map((hypothesis) => (
+                        <li key={hypothesis.title} className="text-sm text-text-secondary">
+                          <span className="industrial-label text-text-tertiary">Hypothesis</span>{' '}
+                          {hypothesis.title}
+                        </li>
+                      ))}
+                    </ul>
+                    <div className="mt-4 flex flex-wrap items-center gap-4">
+                      {opsInsights.actions.slice(0, 3).map((action) => (
+                        <button
+                          key={action.title}
+                          type="button"
+                          onClick={() => triggerInsightAction(action.endpointHint)}
+                          className="industrial-action"
+                        >
+                          {action.title}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                ) : null}
+              </div>
+            </section>
+
+            <section aria-labelledby="service-risk-title">
+              <SectionHeading id="service-risk-title" eyebrow="Service Risk" title="Hot Spots" />
+              <div className="mt-6 border-t border-white/10 pt-5">
+                {opsMetrics?.serviceRisk?.length ? (
+                  <ul className="space-y-2">
+                    {opsMetrics.serviceRisk.slice(0, 6).map((riskItem) => (
+                      <li key={riskItem.service} className="flex items-start justify-between gap-4 text-sm">
+                        <div className="min-w-0">
+                          <p className="industrial-data text-text-primary">{riskItem.service}</p>
+                          <p className="mt-1 truncate text-text-secondary">{riskItem.reasons[0] ?? 'watch signal'}</p>
+                        </div>
+                        <span className={cn('industrial-data', riskItem.score >= 0.7 ? 'text-state-danger' : 'text-text-secondary')}>
+                          {riskItem.score.toFixed(2)}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-sm text-text-secondary">No elevated service risk signals right now.</p>
+                )}
+              </div>
+            </section>
+
             {isDemoExperience ? (
               <section aria-labelledby="demo-mode-title">
                 <SectionHeading id="demo-mode-title" eyebrow="Demo Mode" title="How It Works" />
@@ -1483,7 +1731,7 @@ export function OverviewView() {
                   <ul className="mt-4 space-y-2 text-sm text-text-secondary">
                     <li className="flex items-start gap-3">
                       <span className="industrial-label text-text-tertiary">Baseline</span>
-                      <span>Healthy, degraded, and disconnected scenarios are seeded from in-app model data.</span>
+                      <span>Healthy, degraded, incident burst, recovery, and disconnected scenarios are seeded from in-app model data.</span>
                     </li>
                     <li className="flex items-start gap-3">
                       <span className="industrial-label text-text-tertiary">Telemetry</span>
@@ -1525,6 +1773,20 @@ export function OverviewView() {
                         className={cn('industrial-action', activeScenario === 'disconnected' && 'industrial-action-accent')}
                       >
                         Disconnected
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setScenario('incident-burst')}
+                        className={cn('industrial-action', activeScenario === 'incident-burst' && 'industrial-action-accent')}
+                      >
+                        Incident Burst
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setScenario('recovery')}
+                        className={cn('industrial-action', activeScenario === 'recovery' && 'industrial-action-accent')}
+                      >
+                        Recovery
                       </button>
                       {scenarioKind ? (
                         <button type="button" onClick={clearScenario} className="industrial-action">

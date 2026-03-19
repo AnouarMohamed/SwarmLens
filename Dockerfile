@@ -11,7 +11,7 @@ FROM node:22-alpine AS frontend-builder
 WORKDIR /build
 COPY package.json package-lock.json ./
 RUN npm ci
-COPY index.html vite.config.ts tsconfig.json ./
+COPY index.html vite.config.ts tsconfig.json tailwind.config.js postcss.config.js ./
 COPY src/ ./src/
 RUN npm run build
 

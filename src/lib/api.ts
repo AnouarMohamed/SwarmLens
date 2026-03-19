@@ -1,7 +1,8 @@
 import type {
   SwarmInfo, Node, Stack, Service, Task, Network,
   Volume, Secret, Config, SwarmEvent, Finding,
-  Incident, AuditEntry, ListResponse, ItemResponse,
+  Incident, AuditEntry, OpsMetrics, OpsInsights, ActionOutcome,
+  ListResponse, ItemResponse,
 } from '../types'
 
 const BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? '/api/v1'
@@ -60,6 +61,20 @@ async function put<T>(path: string, body: unknown): Promise<T> {
   return res.json()
 }
 
+async function del<T>(path: string): Promise<T> {
+  const token = localStorage.getItem('sl_token')
+  const res = await fetch(`${BASE}${path}`, {
+    method: 'DELETE',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText, code: String(res.status) }))
+    throw new APIError(res.status, err.code, err.error)
+  }
+  if (res.status === 204) return undefined as T
+  return res.json()
+}
+
 function sse(path: string): EventSource {
   const token = localStorage.getItem('sl_token')
   const url = token
@@ -82,7 +97,7 @@ export const api = {
     list: () => get<ListResponse<Stack>>('/stacks').then(r => r.data),
     get: (name: string) => get<ItemResponse<Stack>>(`/stacks/${name}`).then(r => r.data),
     deploy: (name: string, body: unknown) => post(`/stacks/${name}/deploy`, body),
-    remove: (name: string) => post(`/stacks/${name}`, undefined), // DELETE via POST for now
+    remove: (name: string) => del(`/stacks/${name}`),
   },
   services: {
     list: (stack?: string) => get<ListResponse<Service>>(`/services${stack ? `?stack=${stack}` : ''}`).then(r => r.data),
@@ -129,6 +144,66 @@ export const api = {
   },
   audit: {
     list: (limit = 50, offset = 0) => get<ListResponse<AuditEntry>>(`/audit?limit=${limit}&offset=${offset}`).then(r => r.data),
+  },
+  ops: {
+    metrics: () => get<ItemResponse<OpsMetrics>>('/ops/metrics').then(r => r.data),
+    insights: () => get<ItemResponse<OpsInsights>>('/ops/insights').then(r => r.data),
+  },
+  actions: {
+    execute: (payload: { action: string; resource?: string; resourceID?: string; params?: Record<string, unknown> }) =>
+      post<ItemResponse<ActionOutcome>>('/actions/execute', payload).then(r => r.data),
+  },
+  assistant: {
+    chatStream: async (
+      prompt: string,
+      handlers: {
+        onEvent?: (event: string, payload: unknown) => void
+        onDone?: () => void
+        onError?: (message: string) => void
+      } = {},
+    ) => {
+      const token = localStorage.getItem('sl_token')
+      const res = await fetch(`${BASE}/assistant/chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ prompt }),
+      })
+
+      if (!res.ok || !res.body) {
+        const err = await res.json().catch(() => ({ error: res.statusText }))
+        handlers.onError?.(err.error || 'assistant stream failed')
+        return
+      }
+
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        const chunks = buffer.split('\n\n')
+        buffer = chunks.pop() ?? ''
+        for (const chunk of chunks) {
+          const lines = chunk.split('\n')
+          const eventLine = lines.find((line) => line.startsWith('event:'))
+          const dataLine = lines.find((line) => line.startsWith('data:'))
+          const event = eventLine?.slice(6).trim() ?? 'message'
+          const data = dataLine?.slice(5).trim() ?? '{}'
+          let payload: unknown = data
+          try {
+            payload = JSON.parse(data)
+          } catch {
+            payload = data
+          }
+          handlers.onEvent?.(event, payload)
+          if (event === 'done') handlers.onDone?.()
+        }
+      }
+    },
   },
   obs: {
     healthz: () => get('/healthz'),

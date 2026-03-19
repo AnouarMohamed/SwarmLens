@@ -3,6 +3,7 @@
 package predictor
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -14,9 +15,10 @@ import (
 
 // RiskScore is the response from the predictor.
 type RiskScore struct {
-	Score      float64 `json:"score"`
-	Confidence float64 `json:"confidence"`
-	Source     string  `json:"source"` // "predictor" or "local"
+	Score      float64  `json:"score"`
+	Confidence float64  `json:"confidence"`
+	Factors    []string `json:"factors,omitempty"`
+	Source     string   `json:"source"` // "predictor" or "local"
 }
 
 // Client calls the predictor service with a shared-secret header.
@@ -45,16 +47,24 @@ func (c *Client) Score(ctx context.Context, payload interface{}) RiskScore {
 		return localScore(payload)
 	}
 	url := fmt.Sprintf("%s/score", c.baseURL)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	body, err := json.Marshal(payload)
 	if err != nil {
 		return localScore(payload)
 	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		return localScore(payload)
+	}
+	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Shared-Secret", c.secret)
 	resp, err := c.http.Do(req)
 	if err != nil {
 		return localScore(payload)
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode >= http.StatusBadRequest {
+		return localScore(payload)
+	}
 	var score RiskScore
 	if err := json.NewDecoder(resp.Body).Decode(&score); err != nil {
 		return localScore(payload)
@@ -65,5 +75,10 @@ func (c *Client) Score(ctx context.Context, payload interface{}) RiskScore {
 
 // localScore provides a basic deterministic fallback score.
 func localScore(_ interface{}) RiskScore {
-	return RiskScore{Score: 0.5, Confidence: 0.3, Source: "local"}
+	return RiskScore{
+		Score:      0.5,
+		Confidence: 0.3,
+		Factors:    []string{"predictor unavailable; using deterministic local baseline"},
+		Source:     "local",
+	}
 }

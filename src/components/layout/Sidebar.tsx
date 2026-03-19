@@ -6,6 +6,7 @@ import {
   ChevronDownIcon,
   DiagnosticsIcon,
   IncidentIcon,
+  InfoIcon,
   NetworkIcon,
   NodeIcon,
   OverviewIcon,
@@ -67,6 +68,13 @@ const NAV_ITEMS: NavItem[] = [
     group: 'Operations',
     description: 'Review write operations, actors, and reconciliation history.',
     icon: AuditIcon,
+  },
+  {
+    to: '/assistant',
+    label: 'Assistant',
+    group: 'Operations',
+    description: 'Stream AI-backed triage hypotheses and remediation actions.',
+    icon: InfoIcon,
   },
   {
     to: '/stacks',

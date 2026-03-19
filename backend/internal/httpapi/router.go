@@ -4,6 +4,7 @@ package httpapi
 import (
 	"log/slog"
 	"net/http"
+	"sync"
 
 	"github.com/AnouarMohamed/swarmlens/backend/internal/audit"
 	"github.com/AnouarMohamed/swarmlens/backend/internal/auth"
@@ -12,6 +13,7 @@ import (
 	"github.com/AnouarMohamed/swarmlens/backend/internal/incident"
 	"github.com/AnouarMohamed/swarmlens/backend/internal/intelligence"
 	"github.com/AnouarMohamed/swarmlens/backend/internal/intelligence/plugins"
+	"github.com/AnouarMohamed/swarmlens/backend/internal/predictor"
 	"github.com/AnouarMohamed/swarmlens/backend/internal/state"
 	"github.com/AnouarMohamed/swarmlens/backend/internal/stream"
 )
@@ -21,6 +23,7 @@ type deps struct {
 	cfg       config.Config
 	logger    *slog.Logger
 	docker    *docker.Client
+	predictor *predictor.Client
 	cache     *state.Cache
 	engine    *intelligence.Engine
 	authSvc   *auth.Service
@@ -28,6 +31,7 @@ type deps struct {
 	bus       *stream.Bus
 	auditLog  *audit.Store
 	incidents *incident.Store
+	refreshMu sync.Mutex
 }
 
 // NewRouter builds and returns the fully-wired HTTP router.
@@ -41,6 +45,7 @@ func NewRouter(cfg config.Config, logger *slog.Logger) (http.Handler, error) {
 		cfg:       cfg,
 		logger:    logger,
 		docker:    dockerClient,
+		predictor: predictor.New(cfg),
 		cache:     state.New(),
 		engine:    intelligence.New(plugins.Register()),
 		authSvc:   auth.New(cfg),
@@ -56,6 +61,7 @@ func NewRouter(cfg config.Config, logger *slog.Logger) (http.Handler, error) {
 		d.cache.SetSnapshot(snap)
 		d.cache.SetEvents(docker.DemoEvents())
 	}
+	_ = d.ensureSnapshotFresh(nil, true)
 
 	mux := http.NewServeMux()
 	d.registerRoutes(mux)
@@ -77,6 +83,8 @@ func (d *deps) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/metrics/prometheus", d.handleMetricsPrometheus)
 	mux.HandleFunc("GET /api/v1/runtime", d.handleRuntime)
 	mux.HandleFunc("GET /api/v1/openapi.yaml", d.handleOpenAPI)
+	mux.HandleFunc("GET /api/v1/ops/metrics", d.authMiddleware(d.handleOpsMetrics))
+	mux.HandleFunc("GET /api/v1/ops/insights", d.authMiddleware(d.handleOpsInsights))
 
 	// ── Swarm ─────────────────────────────────────────────────────────────────
 	mux.HandleFunc("GET /api/v1/swarm", d.authMiddleware(d.handleSwarm))
@@ -104,6 +112,7 @@ func (d *deps) registerRoutes(mux *http.ServeMux) {
 	// ── Tasks ─────────────────────────────────────────────────────────────────
 	mux.HandleFunc("GET /api/v1/tasks", d.authMiddleware(d.handleTasksList))
 	mux.HandleFunc("GET /api/v1/tasks/{id}", d.authMiddleware(d.handleTasksGet))
+	mux.HandleFunc("POST /api/v1/tasks/{id}/restart", d.authMiddleware(d.writeMiddleware(d.handleTaskRestart)))
 
 	// ── Networks ──────────────────────────────────────────────────────────────
 	mux.HandleFunc("GET /api/v1/networks", d.authMiddleware(d.handleNetworksList))
@@ -136,6 +145,7 @@ func (d *deps) registerRoutes(mux *http.ServeMux) {
 
 	// ── Assistant ─────────────────────────────────────────────────────────────
 	mux.HandleFunc("POST /api/v1/assistant/chat", d.authMiddleware(d.handleAssistantChat))
+	mux.HandleFunc("POST /api/v1/actions/execute", d.authMiddleware(d.handleActionExecute))
 }
 
 // chain applies middleware outermost-first.

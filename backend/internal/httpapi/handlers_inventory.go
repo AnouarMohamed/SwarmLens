@@ -10,15 +10,27 @@ import (
 // ── Swarm ─────────────────────────────────────────────────────────────────────
 
 func (d *deps) handleSwarm(w http.ResponseWriter, r *http.Request) {
-	snap, _ := d.cache.GetSnapshot()
+	snap, freshness, lastSync, syncErr := d.snapshotForRequest(r)
 	quorum := snap.Managers >= 3 || snap.Managers == 1
+	risk := d.cache.GetRisk()
+	clusterID := "cluster-unset"
+	if len(snap.Nodes) > 0 {
+		clusterID = snap.Nodes[0].ID
+	}
 	writeOK(w, model.SwarmInfo{
+		ClusterID:     clusterID,
+		CreatedAt:     lastSync,
+		UpdatedAt:     lastSync,
 		Managers:      snap.Managers,
 		Workers:       snap.Workers,
 		QuorumHealthy: quorum,
 		RaftState:     raftState(snap.Managers),
 		Mode:          d.cfg.AppMode,
 		WriteEnabled:  d.cfg.WriteActionsEnabled,
+		Freshness:     freshness,
+		LastSyncAt:    lastSync,
+		SyncError:     syncErr,
+		Risk:          risk,
 	})
 }
 
@@ -38,13 +50,13 @@ func raftState(managers int) string {
 // ── Nodes ─────────────────────────────────────────────────────────────────────
 
 func (d *deps) handleNodesList(w http.ResponseWriter, r *http.Request) {
-	snap, _ := d.cache.GetSnapshot()
+	snap, _, _, _ := d.snapshotForRequest(r)
 	writeList(w, snap.Nodes, len(snap.Nodes))
 }
 
 func (d *deps) handleNodesGet(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	snap, _ := d.cache.GetSnapshot()
+	snap, _, _, _ := d.snapshotForRequest(r)
 	for _, n := range snap.Nodes {
 		if n.ID == id || n.Hostname == id {
 			writeOK(w, n)
@@ -57,14 +69,14 @@ func (d *deps) handleNodesGet(w http.ResponseWriter, r *http.Request) {
 // ── Stacks ────────────────────────────────────────────────────────────────────
 
 func (d *deps) handleStacksList(w http.ResponseWriter, r *http.Request) {
-	snap, _ := d.cache.GetSnapshot()
+	snap, _, _, _ := d.snapshotForRequest(r)
 	stacks := deriveStacks(snap.Services)
 	writeList(w, stacks, len(stacks))
 }
 
 func (d *deps) handleStacksGet(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
-	snap, _ := d.cache.GetSnapshot()
+	snap, _, _, _ := d.snapshotForRequest(r)
 	stacks := deriveStacks(snap.Services)
 	for _, s := range stacks {
 		if s.Name == name {
@@ -115,7 +127,7 @@ func deriveStacks(services []model.Service) []model.Stack {
 // ── Services ──────────────────────────────────────────────────────────────────
 
 func (d *deps) handleServicesList(w http.ResponseWriter, r *http.Request) {
-	snap, _ := d.cache.GetSnapshot()
+	snap, _, _, _ := d.snapshotForRequest(r)
 	stack := r.URL.Query().Get("stack")
 	if stack == "" {
 		writeList(w, snap.Services, len(snap.Services))
@@ -132,7 +144,7 @@ func (d *deps) handleServicesList(w http.ResponseWriter, r *http.Request) {
 
 func (d *deps) handleServicesGet(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	snap, _ := d.cache.GetSnapshot()
+	snap, _, _, _ := d.snapshotForRequest(r)
 	for _, svc := range snap.Services {
 		if svc.ID == id || svc.Name == id {
 			writeOK(w, svc)
@@ -145,7 +157,7 @@ func (d *deps) handleServicesGet(w http.ResponseWriter, r *http.Request) {
 // ── Tasks ─────────────────────────────────────────────────────────────────────
 
 func (d *deps) handleTasksList(w http.ResponseWriter, r *http.Request) {
-	snap, _ := d.cache.GetSnapshot()
+	snap, _, _, _ := d.snapshotForRequest(r)
 	q := r.URL.Query()
 	svcID := q.Get("service")
 	nodeID := q.Get("node")
@@ -173,7 +185,7 @@ func (d *deps) handleTasksList(w http.ResponseWriter, r *http.Request) {
 
 func (d *deps) handleTasksGet(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	snap, _ := d.cache.GetSnapshot()
+	snap, _, _, _ := d.snapshotForRequest(r)
 	for _, t := range snap.Tasks {
 		if t.ID == id {
 			writeOK(w, t)
@@ -186,33 +198,33 @@ func (d *deps) handleTasksGet(w http.ResponseWriter, r *http.Request) {
 // ── Networks ──────────────────────────────────────────────────────────────────
 
 func (d *deps) handleNetworksList(w http.ResponseWriter, r *http.Request) {
-	snap, _ := d.cache.GetSnapshot()
+	snap, _, _, _ := d.snapshotForRequest(r)
 	writeList(w, snap.Networks, len(snap.Networks))
 }
 
 // ── Volumes ───────────────────────────────────────────────────────────────────
 
 func (d *deps) handleVolumesList(w http.ResponseWriter, r *http.Request) {
-	snap, _ := d.cache.GetSnapshot()
+	snap, _, _, _ := d.snapshotForRequest(r)
 	writeList(w, snap.Volumes, len(snap.Volumes))
 }
 
 // ── Secrets & Configs ─────────────────────────────────────────────────────────
 
 func (d *deps) handleSecretsList(w http.ResponseWriter, r *http.Request) {
-	snap, _ := d.cache.GetSnapshot()
+	snap, _, _, _ := d.snapshotForRequest(r)
 	writeList(w, snap.Secrets, len(snap.Secrets))
 }
 
 func (d *deps) handleConfigsList(w http.ResponseWriter, r *http.Request) {
-	snap, _ := d.cache.GetSnapshot()
+	snap, _, _, _ := d.snapshotForRequest(r)
 	writeList(w, snap.Configs, len(snap.Configs))
 }
 
 // ── Events ────────────────────────────────────────────────────────────────────
 
 func (d *deps) handleEventsList(w http.ResponseWriter, r *http.Request) {
-	events := d.cache.GetEvents()
+	events, _, _, _ := d.eventsForRequest(r)
 	typeFilter := r.URL.Query().Get("type")
 	if typeFilter != "" {
 		var filtered []model.SwarmEvent

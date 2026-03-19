@@ -41,7 +41,7 @@ jobs:
         run: cd backend && CGO_ENABLED=1 go test -race ./...
 
   frontend:
-    name: Frontend (lint + typecheck + build)
+    name: Frontend (lint + typecheck + test + build)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -58,6 +58,8 @@ jobs:
         run: npm run lint:ci
       - name: Typecheck
         run: npm run typecheck
+      - name: Unit tests
+        run: npm run test:web -- --passWithNoTests
       - name: Build
         run: npm run build
 
@@ -93,3 +95,9 @@ jobs:
         run: docker build -t swarmlens:ci .
       - name: Build predictor image
         run: docker build -t swarmlens-predictor:ci predictor/
+      - name: Main image startup smoke
+        run: |
+          docker run -d --name swarmlens-ci-smoke -p 18080:8080 swarmlens:ci
+          sleep 8
+          curl --fail --silent http://localhost:18080/api/v1/healthz
+          docker rm -f swarmlens-ci-smoke

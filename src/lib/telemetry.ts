@@ -69,6 +69,18 @@ export function buildOverviewTelemetry(input: OverviewTelemetryInput) {
       failed,
       critical,
       warning,
+      risk: clamp(
+        Number(
+          (
+            (critical * 0.08) +
+            (warning * 0.04) +
+            (failed / Math.max(running + failed, 1)) * 0.6
+          ).toFixed(3),
+        ),
+        0,
+        1,
+      ),
+      restarts: clamp(Math.round(failed * 1.5 + wobble(idx, 2.2, 0.2)), 0, 120),
     }
   })
 

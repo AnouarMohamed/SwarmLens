@@ -26,6 +26,8 @@ type Config struct {
 	DiagnosticsSchedule   int
 	PredictorBaseURL      string
 	PredictorSecret       string
+	LiveActionPolicy      string
+	SnapshotStaleSeconds  int
 	AssistantProvider     string
 	AssistantBaseURL      string
 	AssistantAPIKey       string
@@ -62,6 +64,8 @@ func Load() (Config, error) {
 		DiagnosticsSchedule:   envInt("DIAGNOSTICS_SCHEDULE", 60),
 		PredictorBaseURL:      env("PREDICTOR_BASE_URL", ""),
 		PredictorSecret:       env("PREDICTOR_SHARED_SECRET", ""),
+		LiveActionPolicy:      env("LIVE_ACTION_POLICY", "read_only_dry_run"),
+		SnapshotStaleSeconds:  envInt("SNAPSHOT_STALE_SECONDS", 45),
 		AssistantProvider:     env("ASSISTANT_PROVIDER", "none"),
 		AssistantBaseURL:      env("ASSISTANT_API_BASE_URL", ""),
 		AssistantAPIKey:       env("ASSISTANT_API_KEY", ""),
@@ -89,6 +93,17 @@ func (c *Config) validate() error {
 	}
 	if c.WriteActionsEnabled && !c.AuthEnabled && c.AppMode != "dev" {
 		return errors.New("WRITE_ACTIONS_ENABLED=true requires AUTH_ENABLED=true outside dev mode")
+	}
+	validPolicies := map[string]bool{
+		"read_only_dry_run": true,
+		"allowlist_live":    true,
+		"demo_only":         true,
+	}
+	if !validPolicies[c.LiveActionPolicy] {
+		return errors.New("LIVE_ACTION_POLICY must be read_only_dry_run, allowlist_live, or demo_only")
+	}
+	if c.SnapshotStaleSeconds < 10 {
+		return errors.New("SNAPSHOT_STALE_SECONDS must be >= 10")
 	}
 	return nil
 }
