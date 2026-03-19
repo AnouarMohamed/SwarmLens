@@ -2,9 +2,11 @@ package httpapi
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"runtime/debug"
+	"strings"
 	"sync"
 	"time"
 
@@ -56,21 +58,29 @@ func (d *deps) writeMiddleware(next http.HandlerFunc) http.HandlerFunc {
 
 // ── CORS ──────────────────────────────────────────────────────────────────────
 
-func middlewareCORS(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		origin := r.Header.Get("Origin")
-		if origin != "" {
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-			w.Header().Set("Access-Control-Max-Age", "86400")
-		}
-		if r.Method == http.MethodOptions {
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
+func middlewareCORS(cfg config.Config) func(http.Handler) http.Handler {
+	allowedOrigins := parseAllowedOrigins(cfg.CORSAllowOrigins)
+	allowAll := len(allowedOrigins) == 0
+
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			origin := r.Header.Get("Origin")
+			if origin != "" && (allowAll || allowedOrigins[origin]) {
+				headers := w.Header()
+				headers.Set("Access-Control-Allow-Origin", origin)
+				headers.Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+				headers.Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Request-Id")
+				headers.Set("Access-Control-Max-Age", "86400")
+				headers.Set("Vary", appendVary(headers.Get("Vary"), "Origin"))
+			}
+
+			if r.Method == http.MethodOptions {
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
 }
 
 // ── Security headers ──────────────────────────────────────────────────────────
@@ -135,13 +145,22 @@ func middlewareLogging(logger *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			start := time.Now()
+			requestID := r.Header.Get("X-Request-Id")
+			if requestID == "" {
+				requestID = fmt.Sprintf("req-%d", start.UnixNano())
+			}
+			w.Header().Set("X-Request-Id", requestID)
+
 			rw := &responseWriter{ResponseWriter: w, status: http.StatusOK}
 			next.ServeHTTP(rw, r)
 			logger.Info("request",
+				"request_id", requestID,
 				"method", r.Method,
 				"path", r.URL.Path,
 				"status", rw.status,
 				"duration_ms", time.Since(start).Milliseconds(),
+				"remote_addr", r.RemoteAddr,
+				"user_agent", r.UserAgent(),
 			)
 		})
 	}
@@ -173,4 +192,29 @@ type responseWriter struct {
 func (rw *responseWriter) WriteHeader(status int) {
 	rw.status = status
 	rw.ResponseWriter.WriteHeader(status)
+}
+
+func parseAllowedOrigins(raw string) map[string]bool {
+	allowed := map[string]bool{}
+	for _, token := range strings.Split(raw, ",") {
+		origin := strings.TrimSpace(token)
+		if origin == "" {
+			continue
+		}
+		allowed[origin] = true
+	}
+	return allowed
+}
+
+func appendVary(existing string, value string) string {
+	if existing == "" {
+		return value
+	}
+
+	for _, token := range strings.Split(existing, ",") {
+		if strings.EqualFold(strings.TrimSpace(token), value) {
+			return existing
+		}
+	}
+	return existing + ", " + value
 }

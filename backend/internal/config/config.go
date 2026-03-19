@@ -22,6 +22,7 @@ type Config struct {
 	OIDCUsernameClaim     string
 	OIDCRoleClaim         string
 	TrustedProxyCIDRs     string
+	CORSAllowOrigins      string
 	WriteActionsEnabled   bool
 	WriteApprovalRequired bool
 	DiagnosticsSchedule   int
@@ -60,6 +61,7 @@ func Load() (Config, error) {
 		OIDCUsernameClaim:     env("AUTH_OIDC_USERNAME_CLAIM", ""),
 		OIDCRoleClaim:         env("AUTH_OIDC_ROLE_CLAIM", ""),
 		TrustedProxyCIDRs:     env("AUTH_TRUSTED_PROXY_CIDRS", ""),
+		CORSAllowOrigins:      env("CORS_ALLOW_ORIGINS", ""),
 		WriteActionsEnabled:   envBool("WRITE_ACTIONS_ENABLED", false),
 		WriteApprovalRequired: envBool("WRITE_APPROVAL_REQUIRED", true),
 		DiagnosticsSchedule:   envInt("DIAGNOSTICS_SCHEDULE", 60),

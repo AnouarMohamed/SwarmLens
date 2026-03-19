@@ -69,3 +69,72 @@ func TestExecuteActionRunsDiagnosticsAsLiveReadAction(t *testing.T) {
 		t.Fatalf("expected executed=true")
 	}
 }
+
+func TestExecuteActionReadOnlyPaths(t *testing.T) {
+	d := &deps{
+		cfg: config.Config{
+			AppMode:          "demo",
+			LiveActionPolicy: "read_only_dry_run",
+		},
+		auditLog:  audit.New(100),
+		incidents: incident.New(),
+		cache:     state.New(),
+		engine:    intelligence.New(plugins.Register()),
+		bus:       stream.New(),
+	}
+
+	tests := []struct {
+		name       string
+		req        actionRequest
+		wantStatus model.ActionStatus
+		wantMode   string
+		wantRun    bool
+	}{
+		{
+			name:       "telemetry refresh",
+			req:        actionRequest{Action: "telemetry.refresh"},
+			wantStatus: model.ActionStatusSuccess,
+			wantMode:   "live",
+			wantRun:    true,
+		},
+		{
+			name: "incident create",
+			req: actionRequest{
+				Action: "incident.create",
+				Params: map[string]interface{}{"title": "Manual incident"},
+			},
+			wantStatus: model.ActionStatusSuccess,
+			wantMode:   "live",
+			wantRun:    true,
+		},
+		{
+			name:       "unknown action",
+			req:        actionRequest{Action: "unknown.action"},
+			wantStatus: model.ActionStatusDryRun,
+			wantMode:   "dry_run",
+			wantRun:    false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			outcome := d.executeAction(context.Background(), model.Principal{
+				Username: "alice",
+				Role:     model.RoleOperator,
+			}, tc.req)
+
+			if outcome.Status != tc.wantStatus {
+				t.Fatalf("expected status %s, got %s", tc.wantStatus, outcome.Status)
+			}
+			if outcome.Mode != tc.wantMode {
+				t.Fatalf("expected mode %q, got %q", tc.wantMode, outcome.Mode)
+			}
+			if outcome.Executed != tc.wantRun {
+				t.Fatalf("expected executed=%t, got %t", tc.wantRun, outcome.Executed)
+			}
+			if outcome.AuditID == "" {
+				t.Fatalf("expected audit id to be populated")
+			}
+		})
+	}
+}

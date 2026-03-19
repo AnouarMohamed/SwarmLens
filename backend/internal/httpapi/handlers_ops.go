@@ -56,14 +56,8 @@ func (d *deps) handleOpsInsights(w http.ResponseWriter, r *http.Request) {
 }
 
 func (d *deps) latestFindings() []model.Finding {
-	findingsMu.RLock()
-	defer findingsMu.RUnlock()
-	if len(lastFindings) == 0 {
-		return nil
-	}
-	out := make([]model.Finding, len(lastFindings))
-	copy(out, lastFindings)
-	return out
+	findings, _ := d.diag.snapshot()
+	return findings
 }
 
 func (d *deps) deriveServiceRisk(snap model.Snapshot) []model.ServiceRisk {

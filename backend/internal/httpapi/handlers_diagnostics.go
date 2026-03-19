@@ -4,42 +4,21 @@ import (
 	"context"
 	"net/http"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/AnouarMohamed/swarmlens/backend/internal/model"
 )
 
-// findingsCache stores the most recent diagnostic run result.
-var (
-	findingsMu   sync.RWMutex
-	lastFindings []model.Finding
-	lastRun      time.Time
-)
-
 func (d *deps) handleDiagnosticsList(w http.ResponseWriter, r *http.Request) {
-	findingsMu.RLock()
-	findings := lastFindings
-	ran := lastRun
-	findingsMu.RUnlock()
+	findings, ranAt := d.diag.snapshot()
 
-	// Auto-run if never run or stale (> schedule interval)
-	if findings == nil || time.Since(ran) > time.Duration(d.cfg.DiagnosticsSchedule)*time.Second {
+	// Auto-run if never run or stale (> schedule interval).
+	if len(findings) == 0 || time.Since(ranAt) > time.Duration(d.cfg.DiagnosticsSchedule)*time.Second {
 		findings = d.runDiagnostics()
 	}
 
-	sev := r.URL.Query().Get("severity")
-	if sev != "" {
-		var filtered []model.Finding
-		for _, f := range findings {
-			if string(f.Severity) == sev {
-				filtered = append(filtered, f)
-			}
-		}
-		findings = filtered
-	}
-
-	writeList(w, findings, len(findings))
+	filtered := filterFindingsBySeverity(findings, r.URL.Query().Get("severity"))
+	writeList(w, filtered, len(filtered))
 }
 
 func (d *deps) handleDiagnosticsRun(w http.ResponseWriter, r *http.Request) {
@@ -49,9 +28,7 @@ func (d *deps) handleDiagnosticsRun(w http.ResponseWriter, r *http.Request) {
 
 func (d *deps) handleDiagnosticsGet(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	findingsMu.RLock()
-	findings := lastFindings
-	findingsMu.RUnlock()
+	findings, _ := d.diag.snapshot()
 	for _, f := range findings {
 		if f.ID == id {
 			writeOK(w, f)
@@ -65,8 +42,30 @@ func (d *deps) runDiagnostics() []model.Finding {
 	_ = d.ensureSnapshotFresh(context.Background(), false)
 	snap, _ := d.cache.GetSnapshot()
 	findings := d.engine.Run(snap)
-	critical := 0
-	warning := 0
+
+	critical, warning := summarizeFindings(findings)
+	d.cache.SetFindingsSummary(critical, warning)
+	d.cache.SetRisk(d.predictRisk(context.Background(), snap))
+	d.diag.set(findings, time.Now())
+
+	return findings
+}
+
+func filterFindingsBySeverity(findings []model.Finding, severity string) []model.Finding {
+	if severity == "" {
+		return findings
+	}
+
+	filtered := make([]model.Finding, 0, len(findings))
+	for _, f := range findings {
+		if string(f.Severity) == severity {
+			filtered = append(filtered, f)
+		}
+	}
+	return filtered
+}
+
+func summarizeFindings(findings []model.Finding) (critical int, warning int) {
 	for _, f := range findings {
 		switch strings.ToLower(string(f.Severity)) {
 		case "critical":
@@ -75,11 +74,5 @@ func (d *deps) runDiagnostics() []model.Finding {
 			warning++
 		}
 	}
-	d.cache.SetFindingsSummary(critical, warning)
-	d.cache.SetRisk(d.predictRisk(context.Background(), snap))
-	findingsMu.Lock()
-	lastFindings = findings
-	lastRun = time.Now()
-	findingsMu.Unlock()
-	return findings
+	return critical, warning
 }

@@ -18,7 +18,7 @@ import (
 	"github.com/AnouarMohamed/swarmlens/backend/internal/stream"
 )
 
-// deps holds all shared services injected into handlers.
+// deps holds shared services injected into handlers.
 type deps struct {
 	cfg       config.Config
 	logger    *slog.Logger
@@ -32,6 +32,7 @@ type deps struct {
 	auditLog  *audit.Store
 	incidents *incident.Store
 	refreshMu sync.Mutex
+	diag      diagnosticsState
 }
 
 // NewRouter builds and returns the fully-wired HTTP router.
@@ -55,7 +56,7 @@ func NewRouter(cfg config.Config, logger *slog.Logger) (http.Handler, error) {
 		incidents: incident.New(),
 	}
 
-	// Seed demo data into cache if in demo mode
+	// Seed demo data into cache if in demo mode.
 	if cfg.IsDemo() {
 		snap := docker.DemoSnapshot()
 		d.cache.SetSnapshot(snap)
@@ -69,83 +70,19 @@ func NewRouter(cfg config.Config, logger *slog.Logger) (http.Handler, error) {
 	return chain(mux,
 		middlewareRecover(logger),
 		middlewareLogging(logger),
-		middlewareCORS,
+		middlewareCORS(cfg),
 		middlewareSecurityHeaders,
 		middlewareRateLimit(cfg),
 	), nil
 }
 
 func (d *deps) registerRoutes(mux *http.ServeMux) {
-	// ── Observability ─────────────────────────────────────────────────────────
-	mux.HandleFunc("GET /api/v1/healthz", d.handleHealthz)
-	mux.HandleFunc("GET /api/v1/readyz", d.handleReadyz)
-	mux.HandleFunc("GET /api/v1/metrics", d.handleMetrics)
-	mux.HandleFunc("GET /api/v1/metrics/prometheus", d.handleMetricsPrometheus)
-	mux.HandleFunc("GET /api/v1/runtime", d.handleRuntime)
-	mux.HandleFunc("GET /api/v1/openapi.yaml", d.handleOpenAPI)
-	mux.HandleFunc("GET /api/v1/ops/metrics", d.authMiddleware(d.handleOpsMetrics))
-	mux.HandleFunc("GET /api/v1/ops/insights", d.authMiddleware(d.handleOpsInsights))
-
-	// ── Swarm ─────────────────────────────────────────────────────────────────
-	mux.HandleFunc("GET /api/v1/swarm", d.authMiddleware(d.handleSwarm))
-
-	// ── Nodes ─────────────────────────────────────────────────────────────────
-	mux.HandleFunc("GET /api/v1/nodes", d.authMiddleware(d.handleNodesList))
-	mux.HandleFunc("GET /api/v1/nodes/{id}", d.authMiddleware(d.handleNodesGet))
-	mux.HandleFunc("POST /api/v1/nodes/{id}/drain", d.authMiddleware(d.writeMiddleware(d.handleNodeDrain)))
-	mux.HandleFunc("POST /api/v1/nodes/{id}/activate", d.authMiddleware(d.writeMiddleware(d.handleNodeActivate)))
-
-	// ── Stacks ────────────────────────────────────────────────────────────────
-	mux.HandleFunc("GET /api/v1/stacks", d.authMiddleware(d.handleStacksList))
-	mux.HandleFunc("GET /api/v1/stacks/{name}", d.authMiddleware(d.handleStacksGet))
-	mux.HandleFunc("POST /api/v1/stacks/{name}/deploy", d.authMiddleware(d.writeMiddleware(d.handleStackDeploy)))
-	mux.HandleFunc("DELETE /api/v1/stacks/{name}", d.authMiddleware(d.writeMiddleware(d.handleStackRemove)))
-
-	// ── Services ──────────────────────────────────────────────────────────────
-	mux.HandleFunc("GET /api/v1/services", d.authMiddleware(d.handleServicesList))
-	mux.HandleFunc("GET /api/v1/services/{id}", d.authMiddleware(d.handleServicesGet))
-	mux.HandleFunc("POST /api/v1/services/{id}/scale", d.authMiddleware(d.writeMiddleware(d.handleServiceScale)))
-	mux.HandleFunc("POST /api/v1/services/{id}/restart", d.authMiddleware(d.writeMiddleware(d.handleServiceRestart)))
-	mux.HandleFunc("POST /api/v1/services/{id}/update", d.authMiddleware(d.writeMiddleware(d.handleServiceUpdate)))
-	mux.HandleFunc("POST /api/v1/services/{id}/rollback", d.authMiddleware(d.writeMiddleware(d.handleServiceRollback)))
-
-	// ── Tasks ─────────────────────────────────────────────────────────────────
-	mux.HandleFunc("GET /api/v1/tasks", d.authMiddleware(d.handleTasksList))
-	mux.HandleFunc("GET /api/v1/tasks/{id}", d.authMiddleware(d.handleTasksGet))
-	mux.HandleFunc("POST /api/v1/tasks/{id}/restart", d.authMiddleware(d.writeMiddleware(d.handleTaskRestart)))
-
-	// ── Networks ──────────────────────────────────────────────────────────────
-	mux.HandleFunc("GET /api/v1/networks", d.authMiddleware(d.handleNetworksList))
-
-	// ── Volumes ───────────────────────────────────────────────────────────────
-	mux.HandleFunc("GET /api/v1/volumes", d.authMiddleware(d.handleVolumesList))
-
-	// ── Secrets & Configs ─────────────────────────────────────────────────────
-	mux.HandleFunc("GET /api/v1/secrets", d.authMiddleware(d.handleSecretsList))
-	mux.HandleFunc("GET /api/v1/configs", d.authMiddleware(d.handleConfigsList))
-
-	// ── Events & Stream ───────────────────────────────────────────────────────
-	mux.HandleFunc("GET /api/v1/events", d.authMiddleware(d.handleEventsList))
-	mux.HandleFunc("GET /api/v1/stream/events", d.authMiddleware(d.handleStreamEvents))
-
-	// ── Diagnostics ───────────────────────────────────────────────────────────
-	mux.HandleFunc("GET /api/v1/diagnostics", d.authMiddleware(d.handleDiagnosticsList))
-	mux.HandleFunc("POST /api/v1/diagnostics/run", d.authMiddleware(d.handleDiagnosticsRun))
-	mux.HandleFunc("GET /api/v1/diagnostics/{id}", d.authMiddleware(d.handleDiagnosticsGet))
-
-	// ── Incidents ─────────────────────────────────────────────────────────────
-	mux.HandleFunc("GET /api/v1/incidents", d.authMiddleware(d.handleIncidentsList))
-	mux.HandleFunc("POST /api/v1/incidents", d.authMiddleware(d.handleIncidentsCreate))
-	mux.HandleFunc("GET /api/v1/incidents/{id}", d.authMiddleware(d.handleIncidentsGet))
-	mux.HandleFunc("PUT /api/v1/incidents/{id}", d.authMiddleware(d.handleIncidentsUpdate))
-	mux.HandleFunc("POST /api/v1/incidents/{id}/resolve", d.authMiddleware(d.handleIncidentsResolve))
-
-	// ── Audit ─────────────────────────────────────────────────────────────────
-	mux.HandleFunc("GET /api/v1/audit", d.authMiddleware(d.handleAuditList))
-
-	// ── Assistant ─────────────────────────────────────────────────────────────
-	mux.HandleFunc("POST /api/v1/assistant/chat", d.authMiddleware(d.handleAssistantChat))
-	mux.HandleFunc("POST /api/v1/actions/execute", d.authMiddleware(d.handleActionExecute))
+	d.registerObsRoutes(mux)
+	d.registerInventoryRoutes(mux)
+	d.registerDiagnosticsRoutes(mux)
+	d.registerIncidentsRoutes(mux)
+	d.registerAuditRoutes(mux)
+	d.registerActionRoutes(mux)
 }
 
 // chain applies middleware outermost-first.
