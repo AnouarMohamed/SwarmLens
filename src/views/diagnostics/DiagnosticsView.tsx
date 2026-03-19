@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { GrafanaEmbed } from '../../components/charts/GrafanaEmbed'
 import { GrafanaAreaSeries, GrafanaBarSeries } from '../../components/charts/GrafanaCharts'
 import { grafanaConfig } from '../../lib/grafana'
+import { buildMockDiagnosticsFindings } from '../../lib/mockData'
 import { buildDiagnosticsTelemetry } from '../../lib/telemetry'
 import { relativeTime } from '../../lib/utils'
 import { useClusterStore } from '../../store/clusterStore'
@@ -11,42 +12,6 @@ import { useIncidentStore } from '../../store/incidentStore'
 import type { Finding, Severity } from '../../types'
 
 const SEVERITIES: Array<Severity | 'all'> = ['all', 'critical', 'high', 'medium', 'low', 'info']
-
-const DEMO_FINDINGS: Finding[] = [
-  {
-    id: 'demo-1',
-    severity: 'critical',
-    resource: 'service/payments-worker',
-    scope: 'services',
-    message: 'Replica drift detected in active deployment',
-    evidence: ['0/2 replicas available for 6m', 'placement constraint rejected on worker-02'],
-    recommendation: 'Relax placement constraint and redeploy payments-worker.',
-    source: 'swarm.health',
-    detectedAt: new Date(Date.now() - 6 * 60000).toISOString(),
-  },
-  {
-    id: 'demo-2',
-    severity: 'high',
-    resource: 'node/worker-02',
-    scope: 'nodes',
-    message: 'Heartbeat jitter exceeded threshold',
-    evidence: ['heartbeat delay > 4.2s', 'packet loss 7% on manager network'],
-    recommendation: 'Inspect node network path and manager reachability.',
-    source: 'swarm.scheduler',
-    detectedAt: new Date(Date.now() - 14 * 60000).toISOString(),
-  },
-  {
-    id: 'demo-3',
-    severity: 'medium',
-    resource: 'service/api-gateway',
-    scope: 'services',
-    message: 'Restart pressure increased',
-    evidence: ['3 restarts in 15m', 'rollout running in degraded pace'],
-    recommendation: 'Inspect rollout logs and tune restart policy.',
-    source: 'swarm.runtime',
-    detectedAt: new Date(Date.now() - 22 * 60000).toISOString(),
-  },
-]
 
 function cn(...parts: Array<string | false | undefined>) {
   return parts.filter(Boolean).join(' ')
@@ -83,10 +48,11 @@ export function DiagnosticsView() {
   }, [fetch])
 
   const disconnected = connectionState === 'disconnected' || Boolean(clusterError)
+  const demoFindings = useMemo(() => buildMockDiagnosticsFindings(), [])
   const isDemoCluster = (swarm?.mode ?? '').toLowerCase() === 'demo'
   const useDemo = findings.length === 0 && !loading && isDemoCluster
   const showDemoDetails = isDemoCluster || useDemo
-  const dataset = useDemo ? DEMO_FINDINGS : findings
+  const dataset = useDemo ? demoFindings : findings
 
   const filtered = useMemo(() => {
     return dataset.filter((finding) => {
@@ -228,7 +194,7 @@ export function DiagnosticsView() {
               <span className="industrial-label text-text-tertiary">Dataset</span>
               <span>
                 {useDemo
-                  ? `Using ${DEMO_FINDINGS.length} synthetic findings because live diagnostics returned no data.`
+                  ? `Using ${demoFindings.length} synthetic findings because live diagnostics returned no data.`
                   : 'Live findings are available; demo scenario controls remain available from Overview.'}
               </span>
             </li>

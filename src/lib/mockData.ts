@@ -1,0 +1,173 @@
+import type { Finding, SwarmEvent } from '../types'
+
+function isoMinutesAgo(minutesAgo: number, now: number) {
+  return new Date(now - minutesAgo * 60_000).toISOString()
+}
+
+export function buildMockDiagnosticsFindings(now = Date.now()): Finding[] {
+  return [
+    {
+      id: 'mock-finding-1',
+      severity: 'critical',
+      resource: 'service/payments-worker',
+      scope: 'services',
+      message: 'Replica drift detected in active deployment',
+      evidence: ['0/2 replicas available for 6m', 'placement constraint rejected on worker-02'],
+      recommendation: 'Relax placement constraint and redeploy payments-worker.',
+      source: 'swarm.health',
+      detectedAt: isoMinutesAgo(6, now),
+    },
+    {
+      id: 'mock-finding-2',
+      severity: 'high',
+      resource: 'node/worker-02',
+      scope: 'nodes',
+      message: 'Heartbeat jitter exceeded threshold',
+      evidence: ['heartbeat delay > 4.2s', 'packet loss 7% on manager network'],
+      recommendation: 'Inspect node network path and manager reachability.',
+      source: 'swarm.scheduler',
+      detectedAt: isoMinutesAgo(14, now),
+    },
+    {
+      id: 'mock-finding-3',
+      severity: 'medium',
+      resource: 'service/api-gateway',
+      scope: 'services',
+      message: 'Restart pressure increased during rolling update',
+      evidence: ['3 restarts in 15m', 'rollout running in degraded pace'],
+      recommendation: 'Inspect rollout logs and tune restart policy.',
+      source: 'swarm.runtime',
+      detectedAt: isoMinutesAgo(22, now),
+    },
+    {
+      id: 'mock-finding-4',
+      severity: 'critical',
+      resource: 'service/reports-processor',
+      scope: 'services',
+      message: 'Task crash-loop detected',
+      evidence: ['exit code 137 repeated 9 times', 'memory reservation saturation on worker-03'],
+      recommendation: 'Increase memory reservation and inspect OOM behavior.',
+      source: 'swarm.runtime',
+      detectedAt: isoMinutesAgo(27, now),
+    },
+    {
+      id: 'mock-finding-5',
+      severity: 'high',
+      resource: 'node/manager-02',
+      scope: 'nodes',
+      message: 'Manager reachability degraded',
+      evidence: ['reachability changed to unreachable twice in 20m', 'raft election retries observed'],
+      recommendation: 'Stabilize manager connectivity before applying writes.',
+      source: 'swarm.control-plane',
+      detectedAt: isoMinutesAgo(31, now),
+    },
+    {
+      id: 'mock-finding-6',
+      severity: 'medium',
+      resource: 'service/edge-proxy',
+      scope: 'services',
+      message: 'Warning-level latency regression',
+      evidence: ['p95 startup exceeded baseline by 38%', '2 tasks entered pending > 90s'],
+      recommendation: 'Review image pull and startup probe settings.',
+      source: 'swarm.scheduler',
+      detectedAt: isoMinutesAgo(39, now),
+    },
+    {
+      id: 'mock-finding-7',
+      severity: 'low',
+      resource: 'network/edge-overlay',
+      scope: 'networks',
+      message: 'Overlay packet retry ratio elevated',
+      evidence: ['retry ratio 2.8% over 10m'],
+      recommendation: 'Monitor for sustained increase and validate MTU settings.',
+      source: 'swarm.network',
+      detectedAt: isoMinutesAgo(47, now),
+    },
+    {
+      id: 'mock-finding-8',
+      severity: 'info',
+      resource: 'service/audit-api',
+      scope: 'services',
+      message: 'Config checksum changed in recent deploy',
+      evidence: ['config/swarmlens-audit-v3 attached to latest task set'],
+      recommendation: 'Confirm rollout intent and keep monitoring task health.',
+      source: 'swarm.audit',
+      detectedAt: isoMinutesAgo(56, now),
+    },
+  ]
+}
+
+export function buildMockSwarmEvents(now = Date.now()): SwarmEvent[] {
+  return [
+    {
+      type: 'service',
+      action: 'update',
+      actor: 'payments-worker',
+      message: 'Task rejected due to placement constraint',
+      timestamp: isoMinutesAgo(4, now),
+    },
+    {
+      type: 'node',
+      action: 'health',
+      actor: 'worker-02',
+      message: 'Heartbeat delayed beyond threshold',
+      timestamp: isoMinutesAgo(8, now),
+    },
+    {
+      type: 'service',
+      action: 'restart',
+      actor: 'reports-processor',
+      message: 'Container restarted after OOM signal',
+      timestamp: isoMinutesAgo(12, now),
+    },
+    {
+      type: 'diagnostics',
+      action: 'run',
+      actor: 'swarm.health',
+      message: 'Diagnostics completed with 5 findings',
+      timestamp: isoMinutesAgo(18, now),
+    },
+    {
+      type: 'task',
+      action: 'assign',
+      actor: 'edge-proxy.4',
+      message: 'Task assigned to worker-03',
+      timestamp: isoMinutesAgo(23, now),
+    },
+    {
+      type: 'node',
+      action: 'update',
+      actor: 'manager-02',
+      message: 'Node reachability changed to reachable',
+      timestamp: isoMinutesAgo(29, now),
+    },
+    {
+      type: 'network',
+      action: 'attach',
+      actor: 'edge-overlay',
+      message: 'Service api-gateway attached to overlay network',
+      timestamp: isoMinutesAgo(35, now),
+    },
+    {
+      type: 'service',
+      action: 'scale',
+      actor: 'api-gateway',
+      message: 'Replica set changed from 5 to 6',
+      timestamp: isoMinutesAgo(42, now),
+    },
+    {
+      type: 'audit',
+      action: 'write',
+      actor: 'operator@demo',
+      message: 'Updated restart policy on reports-processor',
+      timestamp: isoMinutesAgo(49, now),
+    },
+    {
+      type: 'service',
+      action: 'deploy',
+      actor: 'audit-api',
+      message: 'Rolling update started with config revision v3',
+      timestamp: isoMinutesAgo(58, now),
+    },
+  ]
+}

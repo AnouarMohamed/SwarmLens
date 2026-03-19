@@ -9,6 +9,7 @@ import {
   GrafanaTimeSeries,
 } from '../../components/charts/GrafanaCharts'
 import { grafanaConfig } from '../../lib/grafana'
+import { buildMockDiagnosticsFindings, buildMockSwarmEvents } from '../../lib/mockData'
 import { buildOverviewTelemetry } from '../../lib/telemetry'
 import { relativeTime } from '../../lib/utils'
 import { useClusterStore } from '../../store/clusterStore'
@@ -640,6 +641,8 @@ export function OverviewView() {
         : null
   const isDemoMode = (swarm?.mode ?? '').toLowerCase() === 'demo'
   const isDemoExperience = isDemoMode || Boolean(scenarioKind)
+  const demoFindings = useMemo(() => buildMockDiagnosticsFindings(), [])
+  const demoEvents = useMemo(() => buildMockSwarmEvents(), [])
 
   const model = useMemo<OverviewModel>(() => {
     if (scenarioKind) return scenarioModel(scenarioKind, endpoint)
@@ -657,11 +660,13 @@ export function OverviewView() {
       (service) => service.runningTasks < service.desiredReplicas || service.failedTasks > 0,
     )
     const pendingTasks = tasks.filter((task) => PENDING_TASK_STATES.has(task.currentState)).length
-    const criticalFindings = findings.filter(
+    const effectiveFindings = findings.length > 0 ? findings : isDemoMode ? demoFindings : []
+    const effectiveEvents = events.length > 0 ? events : isDemoMode ? demoEvents : []
+    const criticalFindings = effectiveFindings.filter(
       (finding) => finding.severity === 'critical' || finding.severity === 'high',
     ).length
-    const warningFindings = findings.filter((finding) => finding.severity === 'medium').length
-    const findingsCount = findings.length
+    const warningFindings = effectiveFindings.filter((finding) => finding.severity === 'medium').length
+    const findingsCount = effectiveFindings.length
     const stale = disconnected || !lastRefresh || Date.now() - lastRefresh > 120_000
     const unknown = disconnected && !lastRefresh && !hasData
     const degraded =
@@ -805,7 +810,7 @@ export function OverviewView() {
         },
       ],
 
-      findings: findings.slice(0, 6).map((finding) => ({
+      findings: effectiveFindings.slice(0, 6).map((finding) => ({
         id: finding.id,
         title: finding.message,
         object: finding.resource,
@@ -813,7 +818,7 @@ export function OverviewView() {
         tone: toneFromSeverity(finding.severity),
         to: '/incidents',
       })),
-      events: events.slice(0, 12).map((evt, idx) => ({
+      events: effectiveEvents.slice(0, 12).map((evt, idx) => ({
         id: `${evt.timestamp}-${idx}`,
         title: evt.message || `${evt.type} ${evt.action}`,
         source: evt.actor || evt.type,
@@ -909,6 +914,9 @@ export function OverviewView() {
   }, [
     scenarioKind,
     endpoint,
+    isDemoMode,
+    demoFindings,
+    demoEvents,
     disconnected,
     nodes,
     services,
