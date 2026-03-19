@@ -83,7 +83,9 @@ export function DiagnosticsView() {
   }, [fetch])
 
   const disconnected = connectionState === 'disconnected' || Boolean(clusterError)
-  const useDemo = findings.length === 0 && !loading && swarm?.mode === 'demo'
+  const isDemoCluster = (swarm?.mode ?? '').toLowerCase() === 'demo'
+  const useDemo = findings.length === 0 && !loading && isDemoCluster
+  const showDemoDetails = isDemoCluster || useDemo
   const dataset = useDemo ? DEMO_FINDINGS : findings
 
   const filtered = useMemo(() => {
@@ -211,6 +213,50 @@ export function DiagnosticsView() {
           </span>
         </div>
       </section>
+
+      {showDemoDetails ? (
+        <section className="border-t border-white/10 pt-6">
+          <p className="industrial-label">Demo Mode</p>
+          <h3 className="mt-2 font-heading text-[1.55rem] uppercase leading-none tracking-[0.05em]">
+            How Diagnostics Demo Works
+          </h3>
+          <p className="mt-3 text-sm text-text-secondary">
+            Diagnostics demo is designed to teach triage flow: synthetic findings, synthetic telemetry trend lines, and the same incident/action handlers used in live mode.
+          </p>
+          <ul className="mt-4 space-y-2 text-sm text-text-secondary">
+            <li className="flex items-start gap-3">
+              <span className="industrial-label text-text-tertiary">Dataset</span>
+              <span>
+                {useDemo
+                  ? `Using ${DEMO_FINDINGS.length} synthetic findings because live diagnostics returned no data.`
+                  : 'Live findings are available; demo scenario controls remain available from Overview.'}
+              </span>
+            </li>
+            <li className="flex items-start gap-3">
+              <span className="industrial-label text-text-tertiary">Telemetry</span>
+              <span>Severity trend and scope bars are generated from deterministic synthetic history so charts stay meaningful in demo sessions.</span>
+            </li>
+            <li className="flex items-start gap-3">
+              <span className="industrial-label text-text-tertiary">Actions</span>
+              <span>Run diagnostics, create incident, bulk create, and export all execute the same handlers as production mode.</span>
+            </li>
+          </ul>
+          <div className="mt-5 border-t border-white/10 pt-4">
+            <p className="industrial-label text-text-secondary">Scenario Walkthrough</p>
+            <div className="mt-3 flex flex-wrap items-center gap-5">
+              <button type="button" onClick={() => navigate('/?scenario=healthy')} className="industrial-action">
+                Open Healthy Overview
+              </button>
+              <button type="button" onClick={() => navigate('/?scenario=degraded')} className="industrial-action">
+                Open Degraded Overview
+              </button>
+              <button type="button" onClick={() => navigate('/?scenario=disconnected')} className="industrial-action">
+                Open Disconnected Overview
+              </button>
+            </div>
+          </div>
+        </section>
+      ) : null}
 
       {grafana.enabled ? (
         <section className="grid grid-cols-1 gap-10 xl:grid-cols-2">

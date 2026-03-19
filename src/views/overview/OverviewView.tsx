@@ -638,6 +638,8 @@ export function OverviewView() {
           ? 'disconnected'
           : 'healthy'
         : null
+  const isDemoMode = (swarm?.mode ?? '').toLowerCase() === 'demo'
+  const isDemoExperience = isDemoMode || Boolean(scenarioKind)
 
   const model = useMemo<OverviewModel>(() => {
     if (scenarioKind) return scenarioModel(scenarioKind, endpoint)
@@ -950,6 +952,21 @@ export function OverviewView() {
 
   const grafana = grafanaConfig()
   const canRunDiagnostics = !model.disconnected && !running
+  const activeScenario: Scenario =
+    scenarioKind ?? (model.disconnected ? 'disconnected' : model.healthLabel === 'Degraded' ? 'degraded' : 'healthy')
+
+  function setScenario(next: Scenario) {
+    const params = new URLSearchParams(searchParams)
+    params.set('scenario', next)
+    navigate({ pathname: '/', search: `?${params.toString()}` })
+  }
+
+  function clearScenario() {
+    const params = new URLSearchParams(searchParams)
+    params.delete('scenario')
+    const query = params.toString()
+    navigate({ pathname: '/', search: query ? `?${query}` : '' })
+  }
 
   if (loading && !hasData && !scenarioKind) return <OverviewSkeleton />
 
@@ -1447,6 +1464,70 @@ export function OverviewView() {
                 </ol>
               </div>
             </section>
+
+            {isDemoExperience ? (
+              <section aria-labelledby="demo-mode-title">
+                <SectionHeading id="demo-mode-title" eyebrow="Demo Mode" title="How It Works" />
+                <div className="mt-6 border-t border-white/10 pt-5">
+                  <p className="text-sm text-text-primary">
+                    Demo mode uses deterministic baseline snapshots plus synthetic telemetry jitter so you can test workflows without a live swarm.
+                  </p>
+                  <ul className="mt-4 space-y-2 text-sm text-text-secondary">
+                    <li className="flex items-start gap-3">
+                      <span className="industrial-label text-text-tertiary">Baseline</span>
+                      <span>Healthy, degraded, and disconnected scenarios are seeded from in-app model data.</span>
+                    </li>
+                    <li className="flex items-start gap-3">
+                      <span className="industrial-label text-text-tertiary">Telemetry</span>
+                      <span>Charts are generated from synthetic 90-minute series and reflect the selected scenario profile.</span>
+                    </li>
+                    <li className="flex items-start gap-3">
+                      <span className="industrial-label text-text-tertiary">Diagnostics</span>
+                      <span>When diagnostics API returns no findings in demo, synthetic findings are used for triage flows.</span>
+                    </li>
+                    <li className="flex items-start gap-3">
+                      <span className="industrial-label text-text-tertiary">Actions</span>
+                      <span>Buttons still call the same handlers as live mode, so interaction behavior matches production paths.</span>
+                    </li>
+                  </ul>
+
+                  <div className="mt-5 border-t border-white/10 pt-4">
+                    <p className="industrial-label text-text-secondary">Scenario Controls</p>
+                    <p className="mt-1 industrial-data text-xs text-text-tertiary">
+                      Active: {activeScenario.toUpperCase()}
+                    </p>
+                    <div className="mt-3 flex flex-wrap items-center gap-5">
+                      <button
+                        type="button"
+                        onClick={() => setScenario('healthy')}
+                        className={cn('industrial-action', activeScenario === 'healthy' && 'industrial-action-accent')}
+                      >
+                        Healthy
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setScenario('degraded')}
+                        className={cn('industrial-action', activeScenario === 'degraded' && 'industrial-action-accent')}
+                      >
+                        Degraded
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setScenario('disconnected')}
+                        className={cn('industrial-action', activeScenario === 'disconnected' && 'industrial-action-accent')}
+                      >
+                        Disconnected
+                      </button>
+                      {scenarioKind ? (
+                        <button type="button" onClick={clearScenario} className="industrial-action">
+                          Use Live Feed
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+              </section>
+            ) : null}
           </aside>
         </div>
       </section>
