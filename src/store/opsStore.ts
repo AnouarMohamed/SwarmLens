@@ -1,6 +1,8 @@
 import { create } from 'zustand'
 import { api } from '../lib/api'
-import type { ActionOutcome, OpsInsights, OpsMetrics } from '../types'
+import type { ActionExecuteRequest, ActionOutcome, OpsInsights, OpsMetrics } from '../types'
+
+type ActionDraft = Omit<ActionExecuteRequest, 'reason'> & { reason?: string }
 
 interface OpsState {
   metrics: OpsMetrics | null
@@ -9,13 +11,7 @@ interface OpsState {
   loading: boolean
   error: string | null
   refresh: () => Promise<void>
-  runAction: (payload: {
-    action: string
-    resource?: string
-    resourceID?: string
-    reason?: string
-    params?: Record<string, unknown>
-  }) => Promise<ActionOutcome | null>
+  runAction: (payload: ActionDraft) => Promise<ActionOutcome | null>
 }
 
 export const useOpsStore = create<OpsState>((set) => ({

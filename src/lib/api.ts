@@ -56,6 +56,7 @@ type EventListQuery = QueryParams<'/clusters/{clusterID}/events', 'get'>
 type DiagnosticsListQuery = QueryParams<'/clusters/{clusterID}/diagnostics', 'get'>
 type AuditListQuery = QueryParams<'/clusters/{clusterID}/audit', 'get'>
 type ApprovalListQuery = QueryParams<'/clusters/{clusterID}/approvals', 'get'>
+type ActionOutcomeData = JsonResponse<'/clusters/{clusterID}/actions/execute', 'post', 200>['data']
 
 class APIError extends Error {
   constructor(public status: number, public code: string, message: string) {
@@ -150,6 +151,63 @@ function postContract<Path extends ContractPath, Status extends number = 200>(
 
 function putContract<Path extends ContractPath>(path: string, body: JsonRequestBody<Path, 'put'>) {
   return put<JsonResponse<Path, 'put', 200>>(path, body)
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function readReplicaCount(params: ActionExecuteRequest['params']) {
+  const replicas = params?.replicas
+  return typeof replicas === 'number' && Number.isFinite(replicas) ? replicas : null
+}
+
+function routeKnownAction(payload: ActionExecuteRequest): Promise<ActionOutcomeData> | null {
+  if (!payload.resourceID) return null
+
+  switch (payload.action) {
+    case 'node.drain':
+      return postContract<'/clusters/{clusterID}/nodes/{id}/drain'>(
+        clusterPath(`/nodes/${payload.resourceID}/drain`),
+        { reason: payload.reason },
+      ).then((r) => r.data)
+    case 'node.activate':
+      return postContract<'/clusters/{clusterID}/nodes/{id}/activate'>(
+        clusterPath(`/nodes/${payload.resourceID}/activate`),
+        { reason: payload.reason },
+      ).then((r) => r.data)
+    case 'service.restart':
+      return postContract<'/clusters/{clusterID}/services/{id}/restart'>(
+        clusterPath(`/services/${payload.resourceID}/restart`),
+        { reason: payload.reason },
+      ).then((r) => r.data)
+    case 'service.scale': {
+      const replicas = readReplicaCount(payload.params)
+      if (replicas === null) return null
+      return postContract<'/clusters/{clusterID}/services/{id}/scale'>(
+        clusterPath(`/services/${payload.resourceID}/scale`),
+        { replicas, reason: payload.reason },
+      ).then((r) => r.data)
+    }
+    case 'service.update':
+      if (!isRecord(payload.params)) return null
+      return postContract<'/clusters/{clusterID}/services/{id}/update'>(
+        clusterPath(`/services/${payload.resourceID}/update`),
+        { ...payload.params, reason: payload.reason } as ServiceUpdateRequest,
+      ).then((r) => r.data)
+    case 'service.rollback':
+      return postContract<'/clusters/{clusterID}/services/{id}/rollback'>(
+        clusterPath(`/services/${payload.resourceID}/rollback`),
+        { reason: payload.reason },
+      ).then((r) => r.data)
+    case 'task.restart':
+      return postContract<'/clusters/{clusterID}/tasks/{id}/restart'>(
+        clusterPath(`/tasks/${payload.resourceID}/restart`),
+        { reason: payload.reason },
+      ).then((r) => r.data)
+    default:
+      return null
+  }
 }
 
 function sse(path: string): EventSource {
@@ -261,8 +319,11 @@ export const api = {
   },
   actions: {
     list: () => getContract<'/clusters/{clusterID}/actions'>(clusterPath('/actions')).then((r) => r.data),
-    execute: (payload: ActionExecuteRequest) =>
-      postContract<'/clusters/{clusterID}/actions/execute'>(clusterPath('/actions/execute'), payload).then((r) => r.data),
+    execute: (payload: ActionExecuteRequest) => {
+      const direct = routeKnownAction(payload)
+      if (direct) return direct
+      return postContract<'/clusters/{clusterID}/actions/execute'>(clusterPath('/actions/execute'), payload).then((r) => r.data)
+    },
   },
   approvals: {
     list: (status?: ApprovalStatus) =>
