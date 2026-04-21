@@ -22,6 +22,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   - `scripts/preflight-prod.sh`
   - `scripts/deploy.sh`
   - `scripts/rollback.sh`
+- v1.5 closeout checklist and backend confidence tests for OIDC role mapping, cluster routing, and action guardrails.
 
 ### Changed
 

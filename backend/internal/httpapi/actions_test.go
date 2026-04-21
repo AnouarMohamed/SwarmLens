@@ -180,3 +180,58 @@ func TestExecuteActionLeavesNonImplementedMutationInDryRun(t *testing.T) {
 		t.Fatalf("expected dry_run mode, got %q", outcome.Mode)
 	}
 }
+
+func TestExecuteActionAllowsSafeScaleWithoutApproval(t *testing.T) {
+	d, cluster, runtime := newTestDeps(t, config.Config{
+		AppMode:              "demo",
+		LiveActionPolicy:     "allowlist_live",
+		ActionSafeScaleDelta: 2,
+	})
+
+	outcome := d.executeAction(context.Background(), cluster, runtime, model.Principal{
+		Username: "alice",
+		Role:     model.RoleOperator,
+	}, actionRequest{
+		Action:     "service.scale",
+		Resource:   "service",
+		ResourceID: "svc-api-01",
+		Reason:     "add headroom before expected traffic",
+		Params:     map[string]interface{}{"replicas": 5},
+	})
+
+	if outcome.Status != model.ActionStatusSuccess {
+		t.Fatalf("expected success, got %s", outcome.Status)
+	}
+	if outcome.ApprovalRequired {
+		t.Fatalf("expected approval to be skipped for safe delta")
+	}
+	if outcome.Mode != "demo" {
+		t.Fatalf("expected demo mode execution, got %q", outcome.Mode)
+	}
+}
+
+func TestExecuteActionBlocksMutationWhenReasonMissing(t *testing.T) {
+	d, cluster, runtime := newTestDeps(t, config.Config{
+		AppMode:          "demo",
+		LiveActionPolicy: "allowlist_live",
+	})
+
+	outcome := d.executeAction(context.Background(), cluster, runtime, model.Principal{
+		Username: "alice",
+		Role:     model.RoleOperator,
+	}, actionRequest{
+		Action:     "service.restart",
+		Resource:   "service",
+		ResourceID: "svc-api-01",
+	})
+
+	if outcome.Status != model.ActionStatusBlocked {
+		t.Fatalf("expected blocked, got %s", outcome.Status)
+	}
+	if outcome.BlockedReason != "reason_required" {
+		t.Fatalf("expected reason_required block, got %q", outcome.BlockedReason)
+	}
+	if outcome.Mode != "blocked" {
+		t.Fatalf("expected blocked mode, got %q", outcome.Mode)
+	}
+}

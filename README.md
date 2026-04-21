@@ -196,6 +196,7 @@ docs/
   DEMO_MODE.md
   PRODUCTION.md
   SECURITY.md
+  V1_5_CLOSEOUT.md
 ```
 
 ## Documentation index
@@ -207,5 +208,6 @@ docs/
 - [docs/DEMO_MODE.md](docs/DEMO_MODE.md) - demo datasets and scenarios
 - [docs/PRODUCTION.md](docs/PRODUCTION.md) - VPS deployment and rollback
 - [docs/SECURITY.md](docs/SECURITY.md) - controls and hardening checklist
+- [docs/V1_5_CLOSEOUT.md](docs/V1_5_CLOSEOUT.md) - milestone status and final validation checklist
 - [CONTRIBUTING.md](CONTRIBUTING.md) - contribution workflow
 - [CHANGELOG.md](CHANGELOG.md) - notable changes
