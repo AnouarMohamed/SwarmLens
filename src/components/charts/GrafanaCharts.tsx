@@ -1,5 +1,11 @@
 import type { ReactNode } from 'react'
-import ReactECharts from 'echarts-for-react'
+import * as echarts from 'echarts/core'
+import { BarChart, LineChart } from 'echarts/charts'
+import { GridComponent, LegendComponent, TooltipComponent } from 'echarts/components'
+import ReactEChartsCore from 'echarts-for-react/lib/core'
+import { CanvasRenderer } from 'echarts/renderers'
+
+echarts.use([LineChart, BarChart, GridComponent, LegendComponent, TooltipComponent, CanvasRenderer])
 
 type Datum = Record<string, number | string>
 
@@ -91,10 +97,11 @@ export function GrafanaTimeSeries({
   lines,
   yDomain = ['auto', 'auto'],
 }: TimeSeriesProps) {
+  const base = baseOption(data, xKey)
   const option = {
-    ...baseOption(data, xKey),
+    ...base,
     yAxis: {
-      ...(baseOption(data, xKey).yAxis as object),
+      ...(base.yAxis as object),
       min: yDomain[0] === 'auto' ? undefined : yDomain[0],
       max: yDomain[1] === 'auto' ? undefined : yDomain[1],
     },
@@ -111,7 +118,7 @@ export function GrafanaTimeSeries({
 
   return (
     <ChartPanel title={title} subtitle={subtitle}>
-      <ReactECharts option={option} style={{ width: '100%', height: '100%' }} />
+      <ReactEChartsCore echarts={echarts} option={option} lazyUpdate style={{ width: '100%', height: '100%' }} />
     </ChartPanel>
   )
 }
@@ -133,7 +140,7 @@ export function GrafanaAreaSeries({ title, subtitle, data, xKey, areas }: AreaSe
 
   return (
     <ChartPanel title={title} subtitle={subtitle}>
-      <ReactECharts option={option} style={{ width: '100%', height: '100%' }} />
+      <ReactEChartsCore echarts={echarts} option={option} lazyUpdate style={{ width: '100%', height: '100%' }} />
     </ChartPanel>
   )
 }
@@ -157,7 +164,7 @@ export function GrafanaBarSeries({ title, subtitle, data, xKey, bars }: BarSerie
 
   return (
     <ChartPanel title={title} subtitle={subtitle}>
-      <ReactECharts option={option} style={{ width: '100%', height: '100%' }} />
+      <ReactEChartsCore echarts={echarts} option={option} lazyUpdate style={{ width: '100%', height: '100%' }} />
     </ChartPanel>
   )
 }

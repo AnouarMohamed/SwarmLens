@@ -1,7 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { Suspense, lazy, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { GrafanaEmbed } from '../../components/charts/GrafanaEmbed'
-import { GrafanaAreaSeries, GrafanaBarSeries } from '../../components/charts/GrafanaCharts'
 import { grafanaConfig } from '../../lib/grafana'
 import { buildMockDiagnosticsFindings } from '../../lib/mockData'
 import { buildDiagnosticsTelemetry } from '../../lib/telemetry'
@@ -10,6 +9,13 @@ import { useClusterStore } from '../../store/clusterStore'
 import { useDiagnosticsStore } from '../../store/diagnosticsStore'
 import { useIncidentStore } from '../../store/incidentStore'
 import type { Finding, Severity } from '../../types'
+
+const GrafanaAreaSeries = lazy(() =>
+  import('../../components/charts/GrafanaCharts').then((module) => ({ default: module.GrafanaAreaSeries })),
+)
+const GrafanaBarSeries = lazy(() =>
+  import('../../components/charts/GrafanaCharts').then((module) => ({ default: module.GrafanaBarSeries })),
+)
 
 const SEVERITIES: Array<Severity | 'all'> = ['all', 'critical', 'high', 'medium', 'low', 'info']
 
@@ -21,6 +27,20 @@ function severityTone(severity: Severity) {
   return severity === 'critical' || severity === 'high' || severity === 'medium'
     ? 'text-state-danger'
     : 'text-text-secondary'
+}
+
+function NativeChartFallback() {
+  return (
+    <section className="grid grid-cols-1 gap-10 xl:grid-cols-2">
+      {Array.from({ length: 2 }, (_, index) => (
+        <div key={index} className="border-t border-border-muted pt-5">
+          <div className="h-3 w-28 animate-pulse bg-white/10" />
+          <div className="mt-2 h-3 w-52 animate-pulse bg-white/5" />
+          <div className="mt-4 h-56 animate-pulse bg-white/[0.04]" />
+        </div>
+      ))}
+    </section>
+  )
 }
 
 export function DiagnosticsView() {
@@ -234,30 +254,32 @@ export function DiagnosticsView() {
           <GrafanaEmbed panelId={12} title="Findings by Scope" subtitle="Top diagnostic scopes" />
         </section>
       ) : (
-        <section className="grid grid-cols-1 gap-10 xl:grid-cols-2">
-          <GrafanaAreaSeries
-            title="Severity Trend"
-            subtitle="Synthetic run history for quick trend scanning"
-            data={telemetry.severityTrend}
-            xKey="time"
-            areas={[
-              { key: 'critical', label: 'Critical', color: '#F5A623' },
-              { key: 'high', label: 'High', color: 'rgba(255,255,255,0.82)' },
-              { key: 'medium', label: 'Medium', color: 'rgba(255,255,255,0.6)' },
-            ]}
-          />
-          <GrafanaBarSeries
-            title="Findings by Scope"
-            subtitle="Top scopes requiring attention"
-            data={
-              telemetry.scopeBars.length > 0
-                ? telemetry.scopeBars
-                : [{ scope: 'none', findings: 0 }]
-            }
-            xKey="scope"
-            bars={[{ key: 'findings', label: 'Findings', color: '#F5A623' }]}
-          />
-        </section>
+        <Suspense fallback={<NativeChartFallback />}>
+          <section className="grid grid-cols-1 gap-10 xl:grid-cols-2">
+            <GrafanaAreaSeries
+              title="Severity Trend"
+              subtitle="Synthetic run history for quick trend scanning"
+              data={telemetry.severityTrend}
+              xKey="time"
+              areas={[
+                { key: 'critical', label: 'Critical', color: '#F5A623' },
+                { key: 'high', label: 'High', color: 'rgba(255,255,255,0.82)' },
+                { key: 'medium', label: 'Medium', color: 'rgba(255,255,255,0.6)' },
+              ]}
+            />
+            <GrafanaBarSeries
+              title="Findings by Scope"
+              subtitle="Top scopes requiring attention"
+              data={
+                telemetry.scopeBars.length > 0
+                  ? telemetry.scopeBars
+                  : [{ scope: 'none', findings: 0 }]
+              }
+              xKey="scope"
+              bars={[{ key: 'findings', label: 'Findings', color: '#F5A623' }]}
+            />
+          </section>
+        </Suspense>
       )}
 
       <section>

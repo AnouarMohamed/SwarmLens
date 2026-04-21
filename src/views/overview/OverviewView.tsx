@@ -1,13 +1,8 @@
 ﻿
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react'
 import type { ComponentType, SVGProps } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { GrafanaEmbed } from '../../components/charts/GrafanaEmbed'
-import {
-  GrafanaAreaSeries,
-  GrafanaBarSeries,
-  GrafanaTimeSeries,
-} from '../../components/charts/GrafanaCharts'
 import { grafanaConfig } from '../../lib/grafana'
 import { buildMockDiagnosticsFindings, buildMockSwarmEvents } from '../../lib/mockData'
 import { buildOverviewTelemetry } from '../../lib/telemetry'
@@ -29,6 +24,16 @@ import {
   ShieldIcon,
   WarningIcon,
 } from '../../components/ui/icons'
+
+const GrafanaAreaSeries = lazy(() =>
+  import('../../components/charts/GrafanaCharts').then((module) => ({ default: module.GrafanaAreaSeries })),
+)
+const GrafanaBarSeries = lazy(() =>
+  import('../../components/charts/GrafanaCharts').then((module) => ({ default: module.GrafanaBarSeries })),
+)
+const GrafanaTimeSeries = lazy(() =>
+  import('../../components/charts/GrafanaCharts').then((module) => ({ default: module.GrafanaTimeSeries })),
+)
 
 type Tone = 'primary' | 'attention' | 'muted'
 type Scenario = 'healthy' | 'degraded' | 'incident-burst' | 'recovery' | 'disconnected'
@@ -645,6 +650,16 @@ function SectionHeading({ id, eyebrow, title, actionLabel, onAction, actionDisab
           <ArrowRightIcon className="h-3.5 w-3.5" />
         </button>
       ) : null}
+    </div>
+  )
+}
+
+function NativeChartPlaceholder({ tall = false }: { tall?: boolean }) {
+  return (
+    <div className="border-t border-border-muted pt-5">
+      <div className="h-3 w-32 animate-pulse bg-white/10" />
+      <div className="mt-2 h-3 w-56 animate-pulse bg-white/5" />
+      <div className={cn('mt-4 animate-pulse bg-white/[0.04]', tall ? 'h-56' : 'h-48')} />
     </div>
   )
 }
@@ -1311,66 +1326,85 @@ export function OverviewView() {
               <GrafanaEmbed panelId={2} title="Failure Pressure" subtitle="Critical and warning findings" />
             </div>
           ) : (
-            <>
-              <div className="mt-6 grid grid-cols-1 gap-10 xl:grid-cols-2">
-                <GrafanaTimeSeries
-                  title="Task Throughput"
-                  subtitle="Running vs failed tasks over the last 90 minutes"
-                  data={telemetry.throughput}
-                  xKey="time"
-                  lines={[
-                    { key: 'running', label: 'Running', color: 'rgba(255,255,255,0.85)' },
-                    { key: 'failed', label: 'Failed', color: '#F5A623' },
-                  ]}
-                />
-                <GrafanaAreaSeries
-                  title="Findings Pressure"
-                  subtitle="Critical and warning findings over time"
-                  data={telemetry.throughput}
-                  xKey="time"
-                  areas={[
-                    { key: 'critical', label: 'Critical', color: '#F5A623' },
-                    { key: 'warning', label: 'Warning', color: 'rgba(255,255,255,0.7)' },
-                  ]}
-                />
-              </div>
-              <div className="mt-10 grid grid-cols-1 gap-10 xl:grid-cols-2">
-                <GrafanaTimeSeries
-                  title="Node Availability"
-                  subtitle="Managers and workers online"
-                  data={telemetry.nodeHealth}
-                  xKey="time"
-                  lines={[
-                    { key: 'managers', label: 'Managers', color: '#F5A623' },
-                    { key: 'workers', label: 'Workers', color: 'rgba(255,255,255,0.8)' },
-                  ]}
-                />
-                <GrafanaTimeSeries
-                  title="Risk Trajectory"
-                  subtitle="Predictive risk score trend"
-                  data={telemetry.throughput}
-                  xKey="time"
-                  lines={[{ key: 'risk', label: 'Risk Score', color: '#F5A623' }]}
-                  yDomain={[0, 1]}
-                />
-              </div>
-              <div className="mt-10 grid grid-cols-1 gap-10 xl:grid-cols-2">
-                <GrafanaBarSeries
-                  title="Current Finding Mix"
-                  subtitle="Severity split in the current window"
-                  data={findingDistribution}
-                  xKey="bucket"
-                  bars={[{ key: 'findings', label: 'Findings', color: '#F5A623' }]}
-                />
-                <GrafanaTimeSeries
-                  title="Task Restarts"
-                  subtitle="Restart pressure trend"
-                  data={telemetry.throughput}
-                  xKey="time"
-                  lines={[{ key: 'restarts', label: 'Restarts', color: 'rgba(255,255,255,0.78)' }]}
-                />
-              </div>
-            </>
+            <Suspense
+              fallback={
+                <>
+                  <div className="mt-6 grid grid-cols-1 gap-10 xl:grid-cols-2">
+                    <NativeChartPlaceholder tall />
+                    <NativeChartPlaceholder tall />
+                  </div>
+                  <div className="mt-10 grid grid-cols-1 gap-10 xl:grid-cols-2">
+                    <NativeChartPlaceholder tall />
+                    <NativeChartPlaceholder tall />
+                  </div>
+                  <div className="mt-10 grid grid-cols-1 gap-10 xl:grid-cols-2">
+                    <NativeChartPlaceholder tall />
+                    <NativeChartPlaceholder tall />
+                  </div>
+                </>
+              }
+            >
+              <>
+                <div className="mt-6 grid grid-cols-1 gap-10 xl:grid-cols-2">
+                  <GrafanaTimeSeries
+                    title="Task Throughput"
+                    subtitle="Running vs failed tasks over the last 90 minutes"
+                    data={telemetry.throughput}
+                    xKey="time"
+                    lines={[
+                      { key: 'running', label: 'Running', color: 'rgba(255,255,255,0.85)' },
+                      { key: 'failed', label: 'Failed', color: '#F5A623' },
+                    ]}
+                  />
+                  <GrafanaAreaSeries
+                    title="Findings Pressure"
+                    subtitle="Critical and warning findings over time"
+                    data={telemetry.throughput}
+                    xKey="time"
+                    areas={[
+                      { key: 'critical', label: 'Critical', color: '#F5A623' },
+                      { key: 'warning', label: 'Warning', color: 'rgba(255,255,255,0.7)' },
+                    ]}
+                  />
+                </div>
+                <div className="mt-10 grid grid-cols-1 gap-10 xl:grid-cols-2">
+                  <GrafanaTimeSeries
+                    title="Node Availability"
+                    subtitle="Managers and workers online"
+                    data={telemetry.nodeHealth}
+                    xKey="time"
+                    lines={[
+                      { key: 'managers', label: 'Managers', color: '#F5A623' },
+                      { key: 'workers', label: 'Workers', color: 'rgba(255,255,255,0.8)' },
+                    ]}
+                  />
+                  <GrafanaTimeSeries
+                    title="Risk Trajectory"
+                    subtitle="Predictive risk score trend"
+                    data={telemetry.throughput}
+                    xKey="time"
+                    lines={[{ key: 'risk', label: 'Risk Score', color: '#F5A623' }]}
+                    yDomain={[0, 1]}
+                  />
+                </div>
+                <div className="mt-10 grid grid-cols-1 gap-10 xl:grid-cols-2">
+                  <GrafanaBarSeries
+                    title="Current Finding Mix"
+                    subtitle="Severity split in the current window"
+                    data={findingDistribution}
+                    xKey="bucket"
+                    bars={[{ key: 'findings', label: 'Findings', color: '#F5A623' }]}
+                  />
+                  <GrafanaTimeSeries
+                    title="Task Restarts"
+                    subtitle="Restart pressure trend"
+                    data={telemetry.throughput}
+                    xKey="time"
+                    lines={[{ key: 'restarts', label: 'Restarts', color: 'rgba(255,255,255,0.78)' }]}
+                  />
+                </div>
+              </>
+            </Suspense>
           )}
         </div>
       </section>
