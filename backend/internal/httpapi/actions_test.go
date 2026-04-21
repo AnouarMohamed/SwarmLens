@@ -4,62 +4,94 @@ import (
 	"context"
 	"testing"
 
-	"github.com/AnouarMohamed/swarmlens/backend/internal/audit"
 	"github.com/AnouarMohamed/swarmlens/backend/internal/config"
-	"github.com/AnouarMohamed/swarmlens/backend/internal/incident"
+	"github.com/AnouarMohamed/swarmlens/backend/internal/docker"
 	"github.com/AnouarMohamed/swarmlens/backend/internal/intelligence"
 	"github.com/AnouarMohamed/swarmlens/backend/internal/intelligence/plugins"
 	"github.com/AnouarMohamed/swarmlens/backend/internal/model"
 	"github.com/AnouarMohamed/swarmlens/backend/internal/state"
+	"github.com/AnouarMohamed/swarmlens/backend/internal/store"
 	"github.com/AnouarMohamed/swarmlens/backend/internal/stream"
 )
 
-func TestExecuteActionReturnsDryRunForMutationInNonDemo(t *testing.T) {
-	d := &deps{
-		cfg: config.Config{
-			AppMode:          "prod",
-			LiveActionPolicy: "read_only_dry_run",
-		},
-		auditLog:  audit.New(100),
-		incidents: incident.New(),
-		cache:     state.New(),
-		engine:    intelligence.New(plugins.Register()),
-		bus:       stream.New(),
+func newTestDeps(t *testing.T, cfg config.Config) (*deps, model.Cluster, *clusterRuntime) {
+	t.Helper()
+	dataStore, err := store.New(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("new store: %v", err)
 	}
+	cluster, err := dataStore.SeedDefaultCluster(context.Background(), model.Cluster{
+		Name:           "primary",
+		DockerHost:     "demo",
+		ConnectionMode: model.ClusterConnectionDemo,
+		Enabled:        true,
+		Default:        true,
+	})
+	if err != nil {
+		t.Fatalf("seed cluster: %v", err)
+	}
+	demoClient, err := docker.New(config.Config{AppMode: "demo"})
+	if err != nil {
+		t.Fatalf("new demo docker client: %v", err)
+	}
+	runtime := &clusterRuntime{
+		cluster: cluster,
+		docker:  demoClient,
+		cache:   state.New(),
+		bus:     stream.New(),
+	}
+	runtime.cache.SetSnapshot(docker.DemoSnapshot())
+	runtime.cache.SetEvents(docker.DemoEvents())
+	d := &deps{
+		cfg:       cfg,
+		store:     dataStore,
+		engine:    intelligence.New(plugins.Register()),
+		runtimes:  map[string]*clusterRuntime{cluster.ID: runtime},
+		predictor: nil,
+	}
+	return d, cluster, runtime
+}
 
-	outcome := d.executeAction(context.Background(), model.Principal{Username: "alice", Role: model.RoleOperator}, actionRequest{
+func TestExecuteActionReturnsPendingApprovalForLargeScale(t *testing.T) {
+	d, cluster, runtime := newTestDeps(t, config.Config{
+		AppMode:              "prod",
+		LiveActionPolicy:     "allowlist_live",
+		ActionSafeScaleDelta: 2,
+	})
+	runtime.docker = nil
+	runtime.cluster.ConnectionMode = model.ClusterConnectionDirect
+
+	outcome := d.executeAction(context.Background(), cluster, runtime, model.Principal{
+		Username: "alice",
+		Role:     model.RoleOperator,
+	}, actionRequest{
 		Action:     "service.scale",
 		Resource:   "service",
-		ResourceID: "svc-1",
-		Params:     map[string]interface{}{"replicas": 3},
+		ResourceID: "svc-api-01",
+		Reason:     "increase headroom for traffic spike",
+		Params:     map[string]interface{}{"replicas": 7},
 	})
 
-	if outcome.Status != model.ActionStatusDryRun {
-		t.Fatalf("expected dry_run, got %s", outcome.Status)
+	if outcome.Status != model.ActionStatusPendingApproval {
+		t.Fatalf("expected pending approval, got %s", outcome.Status)
 	}
-	if outcome.Executed {
-		t.Fatalf("expected executed=false")
-	}
-	if outcome.AuditID == "" {
-		t.Fatalf("expected audit record id")
+	if outcome.ApprovalID == "" {
+		t.Fatalf("expected approval id")
 	}
 }
 
 func TestExecuteActionRunsDiagnosticsAsLiveReadAction(t *testing.T) {
-	d := &deps{
-		cfg: config.Config{
-			AppMode:          "demo",
-			LiveActionPolicy: "read_only_dry_run",
-		},
-		auditLog:  audit.New(100),
-		incidents: incident.New(),
-		cache:     state.New(),
-		engine:    intelligence.New(plugins.Register()),
-		bus:       stream.New(),
-	}
+	d, cluster, runtime := newTestDeps(t, config.Config{
+		AppMode:          "demo",
+		LiveActionPolicy: "read_only_dry_run",
+	})
 
-	outcome := d.executeAction(context.Background(), model.Principal{Username: "alice", Role: model.RoleOperator}, actionRequest{
+	outcome := d.executeAction(context.Background(), cluster, runtime, model.Principal{
+		Username: "alice",
+		Role:     model.RoleOperator,
+	}, actionRequest{
 		Action: "diagnostics.run",
+		Reason: "refresh the cluster baseline",
 	})
 
 	if outcome.Status != model.ActionStatusSuccess {
@@ -70,18 +102,11 @@ func TestExecuteActionRunsDiagnosticsAsLiveReadAction(t *testing.T) {
 	}
 }
 
-func TestExecuteActionReadOnlyPaths(t *testing.T) {
-	d := &deps{
-		cfg: config.Config{
-			AppMode:          "demo",
-			LiveActionPolicy: "read_only_dry_run",
-		},
-		auditLog:  audit.New(100),
-		incidents: incident.New(),
-		cache:     state.New(),
-		engine:    intelligence.New(plugins.Register()),
-		bus:       stream.New(),
-	}
+func TestExecuteActionReadOnlyAndDryRunPaths(t *testing.T) {
+	d, cluster, runtime := newTestDeps(t, config.Config{
+		AppMode:          "demo",
+		LiveActionPolicy: "read_only_dry_run",
+	})
 
 	tests := []struct {
 		name       string
@@ -92,7 +117,7 @@ func TestExecuteActionReadOnlyPaths(t *testing.T) {
 	}{
 		{
 			name:       "telemetry refresh",
-			req:        actionRequest{Action: "telemetry.refresh"},
+			req:        actionRequest{Action: "telemetry.refresh", Reason: "refresh control plane data"},
 			wantStatus: model.ActionStatusSuccess,
 			wantMode:   "live",
 			wantRun:    true,
@@ -101,24 +126,18 @@ func TestExecuteActionReadOnlyPaths(t *testing.T) {
 			name: "incident create",
 			req: actionRequest{
 				Action: "incident.create",
-				Params: map[string]interface{}{"title": "Manual incident"},
+				Reason: "capture operator escalation",
+				Params: map[string]interface{}{"title": "Manual incident", "description": "Escalated by operator"},
 			},
 			wantStatus: model.ActionStatusSuccess,
 			wantMode:   "live",
 			wantRun:    true,
 		},
-		{
-			name:       "unknown action",
-			req:        actionRequest{Action: "unknown.action"},
-			wantStatus: model.ActionStatusDryRun,
-			wantMode:   "dry_run",
-			wantRun:    false,
-		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			outcome := d.executeAction(context.Background(), model.Principal{
+			outcome := d.executeAction(context.Background(), cluster, runtime, model.Principal{
 				Username: "alice",
 				Role:     model.RoleOperator,
 			}, tc.req)
@@ -132,9 +151,32 @@ func TestExecuteActionReadOnlyPaths(t *testing.T) {
 			if outcome.Executed != tc.wantRun {
 				t.Fatalf("expected executed=%t, got %t", tc.wantRun, outcome.Executed)
 			}
-			if outcome.AuditID == "" {
-				t.Fatalf("expected audit id to be populated")
-			}
 		})
+	}
+}
+
+func TestExecuteActionLeavesNonImplementedMutationInDryRun(t *testing.T) {
+	d, cluster, runtime := newTestDeps(t, config.Config{
+		AppMode:          "prod",
+		LiveActionPolicy: "read_only_dry_run",
+	})
+	runtime.docker = nil
+	runtime.cluster.ConnectionMode = model.ClusterConnectionDirect
+
+	outcome := d.executeAction(context.Background(), cluster, runtime, model.Principal{
+		Username: "alice",
+		Role:     model.RoleOperator,
+	}, actionRequest{
+		Action:   "service.update",
+		Reason:   "review dry-run path",
+		Params:   map[string]interface{}{"image": "acme/api:v2"},
+		Resource: "service",
+	})
+
+	if outcome.Status != model.ActionStatusDryRun {
+		t.Fatalf("expected dry_run, got %s", outcome.Status)
+	}
+	if outcome.Mode != "dry_run" {
+		t.Fatalf("expected dry_run mode, got %q", outcome.Mode)
 	}
 }

@@ -1,15 +1,54 @@
 import { useState } from 'react'
 import { useClusterStore } from '../../store/clusterStore'
+import { useControlPlaneStore } from '../../store/controlPlaneStore'
+import { useOpsStore } from '../../store/opsStore'
+import { useSessionStore } from '../../store/sessionStore'
 import { ResourceTable, type Column } from '../../components/ui/ResourceTable'
 import { StatusBadge } from '../../components/ui/Badge'
 import type { Service } from '../../types'
 
+function cn(...parts: Array<string | false | undefined>) {
+  return parts.filter(Boolean).join(' ')
+}
+
 export function ServicesView() {
-  const { services, loading } = useClusterStore()
+  const { services, loading, fetchServices } = useClusterStore()
+  const refreshWorkflow = useControlPlaneStore((s) => s.refreshWorkflow)
+  const runAction = useOpsStore((s) => s.runAction)
+  const me = useSessionStore((s) => s.me)
   const [stackFilter, setStackFilter] = useState('')
+  const [busyKey, setBusyKey] = useState('')
+  const [notice, setNotice] = useState('')
 
   const stackNames = ['', ...Array.from(new Set(services.map((s) => s.stack).filter(Boolean)))]
   const filtered = stackFilter ? services.filter((s) => s.stack === stackFilter) : services
+  const canOperate = me ? me.authenticated && me.role !== 'viewer' : true
+
+  async function submitAction(
+    service: Service,
+    action: string,
+    reasonDefault: string,
+    params?: Record<string, unknown>,
+  ) {
+    const reason = window.prompt('Reason for this action:', reasonDefault)?.trim()
+    if (!reason) return
+
+    const key = `${action}:${service.id}`
+    setBusyKey(key)
+    try {
+      const outcome = await runAction({
+        action,
+        resource: 'service',
+        resourceID: service.id,
+        reason,
+        params,
+      })
+      setNotice(outcome ? `${service.name}: ${outcome.status} · ${outcome.message}` : `${service.name}: action failed`)
+      await Promise.all([fetchServices(), refreshWorkflow()])
+    } finally {
+      setBusyKey('')
+    }
+  }
 
   const columns: Column<Service>[] = [
     {
@@ -63,6 +102,77 @@ export function ServicesView() {
       render: (s) => <span className="dim">{s.mode}</span>,
       width: '90px',
     },
+    {
+      key: 'actions',
+      header: 'Actions',
+      render: (service) => (
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={() => {
+              void submitAction(
+                service,
+                'service.restart',
+                `Restart ${service.name} to recover failed tasks.`,
+              )
+            }}
+            disabled={!canOperate || busyKey === `service.restart:${service.id}`}
+            className={cn('industrial-action', (!canOperate || busyKey === `service.restart:${service.id}`) && 'cursor-not-allowed opacity-35')}
+          >
+            Restart
+          </button>
+          {service.mode === 'replicated' ? (
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  void submitAction(
+                    service,
+                    'service.scale',
+                    `Scale ${service.name} up by one replica.`,
+                    { replicas: service.desiredReplicas + 1 },
+                  )
+                }}
+                disabled={!canOperate || busyKey === `service.scale:${service.id}`}
+                className={cn('industrial-action', (!canOperate || busyKey === `service.scale:${service.id}`) && 'cursor-not-allowed opacity-35')}
+              >
+                +1
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  void submitAction(
+                    service,
+                    'service.scale',
+                    `Scale ${service.name} down by one replica.`,
+                    { replicas: Math.max(service.desiredReplicas - 1, 0) },
+                  )
+                }}
+                disabled={!canOperate || service.desiredReplicas === 0 || busyKey === `service.scale:${service.id}`}
+                className={cn('industrial-action', (!canOperate || service.desiredReplicas === 0 || busyKey === `service.scale:${service.id}`) && 'cursor-not-allowed opacity-35')}
+              >
+                -1
+              </button>
+            </>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => {
+              void submitAction(
+                service,
+                'service.rollback',
+                `Rollback ${service.name} to the previous service spec.`,
+              )
+            }}
+            disabled={!canOperate || busyKey === `service.rollback:${service.id}`}
+            className={cn('industrial-action', (!canOperate || busyKey === `service.rollback:${service.id}`) && 'cursor-not-allowed opacity-35')}
+          >
+            Rollback
+          </button>
+        </div>
+      ),
+      width: '280px',
+    },
   ]
 
   return (
@@ -84,6 +194,7 @@ export function ServicesView() {
           </select>
         </div>
       </div>
+      {notice ? <p className="mb-3 text-sm text-text-secondary">{notice}</p> : null}
       <ResourceTable
         columns={columns}
         rows={filtered}

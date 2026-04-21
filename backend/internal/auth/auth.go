@@ -30,11 +30,11 @@ func New(cfg config.Config) *Service {
 	}
 }
 
-// Extract returns the Principal for a request.
+// ExtractBearer returns the Principal for a bearer-token request.
 // If auth is disabled, returns a synthetic admin principal (dev/demo convenience).
-func (s *Service) Extract(r *http.Request) (model.Principal, error) {
+func (s *Service) ExtractBearer(r *http.Request) (model.Principal, error) {
 	if !s.enabled {
-		return model.Principal{Username: "anonymous", Role: model.RoleAdmin}, nil
+		return model.Principal{Username: "anonymous", Role: model.RoleAdmin, Provider: "local"}, nil
 	}
 
 	token := extractToken(r)
@@ -47,7 +47,7 @@ func (s *Service) Extract(r *http.Request) (model.Principal, error) {
 		return model.Principal{}, ErrInvalidToken
 	}
 
-	return model.Principal{Username: st.Username, Role: model.Role(st.Role)}, nil
+	return model.Principal{Username: st.Username, Role: model.Role(st.Role), Provider: "token"}, nil
 }
 
 // Require returns an error if the principal does not have at least the required role.
@@ -74,6 +74,9 @@ func extractToken(r *http.Request) string {
 		if strings.HasPrefix(auth, "Bearer ") {
 			return strings.TrimPrefix(auth, "Bearer ")
 		}
+	}
+	if token := strings.TrimSpace(r.URL.Query().Get("token")); token != "" {
+		return token
 	}
 	return ""
 }

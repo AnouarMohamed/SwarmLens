@@ -13,24 +13,37 @@ Resolution rules:
 | Variable            | Default                       | Description                                   |
 | ------------------- | ----------------------------- | --------------------------------------------- |
 | `APP_MODE`          | `demo`                        | Runtime mode: `dev`, `demo`, `prod`.          |
+| `DEFAULT_CLUSTER_NAME` | `primary`                  | Name seeded for the default cluster record.    |
 | `PORT`              | `8080`                        | Backend HTTP port.                            |
 | `DOCKER_HOST`       | `unix:///var/run/docker.sock` | Docker API endpoint for inventory refresh.    |
 | `DOCKER_TLS_VERIFY` | `false`                       | Enable Docker TLS verification for TCP hosts. |
 | `DOCKER_CERT_PATH`  | empty                         | Docker TLS cert directory.                    |
+| `DATABASE_URL`      | empty                         | Postgres DSN for persistent control-plane data. |
 
 ## Authentication
 
-| Variable                   | Default | Description                              |
-| -------------------------- | ------- | ---------------------------------------- |
-| `AUTH_ENABLED`             | `false` | Enables bearer token authentication.     |
-| `AUTH_TOKENS`              | empty   | Static token list `user:role:token,...`. |
-| `AUTH_TOKENS_FILE`         | empty   | File containing `AUTH_TOKENS` value.     |
-| `AUTH_PROVIDER`            | empty   | Reserved for external providers.         |
-| `AUTH_OIDC_ISSUER_URL`     | empty   | Reserved OIDC config.                    |
-| `AUTH_OIDC_CLIENT_ID`      | empty   | Reserved OIDC config.                    |
-| `AUTH_OIDC_USERNAME_CLAIM` | empty   | Reserved OIDC config.                    |
-| `AUTH_OIDC_ROLE_CLAIM`     | empty   | Reserved OIDC config.                    |
-| `AUTH_TRUSTED_PROXY_CIDRS` | empty   | Trusted proxy CIDR list.                 |
+| Variable                   | Default                 | Description                              |
+| -------------------------- | ----------------------- | ---------------------------------------- |
+| `AUTH_ENABLED`             | `false`                 | Enables authentication middleware.       |
+| `AUTH_TOKENS`              | empty                   | Static token list `user:role:token,...`. |
+| `AUTH_TOKENS_FILE`         | empty                   | File containing `AUTH_TOKENS` value.     |
+| `AUTH_PROVIDER`            | empty                   | Empty or `oidc`.                         |
+| `AUTH_OIDC_ISSUER_URL`     | empty                   | OIDC issuer URL.                         |
+| `AUTH_OIDC_CLIENT_ID`      | empty                   | OIDC client ID.                          |
+| `AUTH_OIDC_CLIENT_SECRET`  | empty                   | OIDC client secret.                      |
+| `AUTH_OIDC_REDIRECT_URL`   | empty                   | Backend callback URL.                    |
+| `AUTH_OIDC_SCOPES`         | `openid,profile,email,groups` | Comma-separated OIDC scopes.       |
+| `AUTH_OIDC_USERNAME_CLAIM` | empty                   | Preferred username claim override.       |
+| `AUTH_OIDC_ROLE_CLAIM`     | empty                   | Optional direct role claim.              |
+| `AUTH_OIDC_GROUPS_CLAIM`   | `groups`                | Claim used for RBAC group mapping.       |
+| `AUTH_OIDC_VIEWER_GROUPS`  | empty                   | Groups mapped to `viewer`.               |
+| `AUTH_OIDC_OPERATOR_GROUPS`| empty                   | Groups mapped to `operator`.             |
+| `AUTH_OIDC_ADMIN_GROUPS`   | empty                   | Groups mapped to `admin`.                |
+| `AUTH_TRUSTED_PROXY_CIDRS` | empty                   | Trusted proxy CIDR list.                 |
+| `CORS_ALLOW_ORIGINS`       | empty                   | Comma-separated CORS allowlist.          |
+| `SESSION_COOKIE_NAME`      | `swarmlens_session`     | Session cookie name.                     |
+| `SESSION_COOKIE_SECURE`    | `true`                  | Marks session cookie `Secure`.           |
+| `SESSION_TTL_HOURS`        | `12`                    | Auth session TTL.                        |
 
 ## Write safety and action policy
 
@@ -38,6 +51,7 @@ Resolution rules:
 | ------------------------- | ------------------- | --------------------------------------------------- |
 | `WRITE_ACTIONS_ENABLED`   | `false`             | Global write gate.                                  |
 | `WRITE_APPROVAL_REQUIRED` | `true`              | Policy hint for high-risk approval workflows.       |
+| `ACTION_SAFE_SCALE_DELTA` | `2`                 | Replica delta allowed before approval is required.  |
 | `LIVE_ACTION_POLICY`      | `read_only_dry_run` | `read_only_dry_run`, `allowlist_live`, `demo_only`. |
 
 ## Diagnostics and freshness

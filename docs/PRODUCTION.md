@@ -1,139 +1,141 @@
-﻿# Production Deployment Guide
+# Production Deployment Guide
 
-This guide covers VPS deployment with Docker Compose and the included rollout scripts.
+SwarmLens v1.5 is designed to run as a small control plane stack: `backend`, `predictor`, and `postgres`, with persistent records stored in Postgres and schema migrations applied before the API comes up.
 
-## 1) Host baseline
+## Baseline
 
-Recommended baseline:
+- Docker Swarm is the primary production target.
+- Postgres is required in `prod`.
+- OIDC session auth is the primary login path.
+- Static tokens are break-glass only.
+- Production rollouts should use versioned images and Swarm update rollback, not host-side `git reset --hard`.
 
-- Linux host with Docker Engine + Compose v2
-- Dedicated non-root deploy user in `docker` group
-- Firewall open only for required ports (`22`, `80/443`, and app port if no reverse proxy)
-- Repository checked out in a stable path such as `/opt/SwarmLens`
+## 1) Prepare secrets
 
-## 2) Prepare environment
+Create the required Swarm secrets before deploy:
 
-Start from template:
+```bash
+docker secret create swarmlens_postgres_password - <<< "<postgres-password>"
+docker secret create swarmlens_database_url - <<< "postgres://swarmlens:<postgres-password>@postgres:5432/swarmlens?sslmode=disable"
+docker secret create swarmlens_oidc_client_secret - <<< "<oidc-client-secret>"
+docker secret create swarmlens_auth_tokens - <<< "breakglass-admin:admin:<strong-token>"
+docker secret create swarmlens_predictor_secret - <<< "<predictor-secret>"
+```
+
+Optional if you enable the narrative assistant:
+
+```bash
+export ASSISTANT_API_KEY="<assistant-api-key>"
+```
+
+## 2) Prepare env
+
+Start from the production template:
 
 ```bash
 cp deploy/env/prod.env.example .env
 chmod 600 .env
 ```
 
-Minimum production expectations:
+Set at least:
 
-- `APP_MODE=prod`
-- `AUTH_ENABLED=true`
-- `AUTH_TOKENS` or `AUTH_TOKENS_FILE` configured
-- `WRITE_ACTIONS_ENABLED=false` by default
-- `LIVE_ACTION_POLICY=read_only_dry_run`
+- `AUTH_OIDC_ISSUER_URL`
+- `AUTH_OIDC_CLIENT_ID`
+- `AUTH_OIDC_REDIRECT_URL`
+- `AUTH_OIDC_VIEWER_GROUPS`
+- `AUTH_OIDC_OPERATOR_GROUPS`
+- `AUTH_OIDC_ADMIN_GROUPS`
+- `CORS_ALLOW_ORIGINS`
+- `ASSISTANT_PROVIDER` and `ASSISTANT_API_BASE_URL` if you want LLM-backed narrative output
 
-## 3) Configure secrets
+## 3) Run migrations
 
-Prefer file-backed secrets. Supported by backend and predictor:
-
-- `AUTH_TOKENS_FILE`
-- `PREDICTOR_SHARED_SECRET_FILE`
-- `ASSISTANT_API_KEY_FILE`
-
-For Swarm stack overlay (`deploy/overlays/prod/stack.yml`), create required Swarm secrets first:
+The image supports a one-shot migration mode:
 
 ```bash
-docker secret create swarmlens_auth_tokens - <<< "admin:admin:<strong-token>"
-docker secret create swarmlens_predictor_secret - <<< "<predictor-secret>"
+docker run --rm --env-file .env \
+  -e RUN_MIGRATIONS_ONLY=true \
+  ghcr.io/anouarmohamed/swarmlens:<tag>
 ```
 
-## 4) Preflight validation
+The Compose and Swarm templates also include a `migrate` service using the same mode.
 
-Run the built-in checks before rollout:
+## 4) Deploy the stack
+
+Use versioned images:
 
 ```bash
-./scripts/preflight-prod.sh
+export SWARMLENS_IMAGE=ghcr.io/anouarmohamed/swarmlens:<tag>
+export SWARMLENS_PREDICTOR_IMAGE=ghcr.io/anouarmohamed/swarmlens-predictor:<tag>
+docker stack deploy -c deploy/overlays/prod/stack.yml swarmlens
 ```
 
-What it validates:
+Recommended rollout behavior already baked into the stack file:
 
-- Required env keys exist
-- `APP_MODE=prod` implies `AUTH_ENABLED=true`
-- Docker daemon is reachable
-- Compose file renders successfully
+- single replica backend on a manager
+- `start-first` updates for the API
+- automatic rollback on failed update
+- persistent Postgres volume
+- healthchecks on backend, predictor, and postgres
 
-## 5) Deploy
+## 5) Verify the rollout
+
+Check service state:
 
 ```bash
-./scripts/deploy.sh
+docker stack services swarmlens
+docker service ps swarmlens_backend
+docker service logs -f swarmlens_backend
 ```
 
-Useful options:
-
-```bash
-DEPLOY_REF=origin/main ./scripts/deploy.sh
-HEALTHCHECK_TIMEOUT=240 ./scripts/deploy.sh
-ENV_FILE=/opt/SwarmLens/.env ./scripts/deploy.sh
-```
-
-Deploy script behavior:
-
-- fetches latest refs
-- hard-resets to target ref
-- renders compose config
-- runs `docker compose up -d --build --remove-orphans`
-- waits for health endpoint
-- records release SHA in `.deploy-history/releases.log`
-
-## 6) Rollback
-
-Rollback to previous successful recorded release:
-
-```bash
-./scripts/rollback.sh
-```
-
-Rollback to explicit target:
-
-```bash
-ROLLBACK_TO=<sha-or-tag> ./scripts/rollback.sh
-```
-
-## 7) Post-deploy verification
+Check control plane health:
 
 ```bash
 curl -fsS http://localhost:8080/api/v1/healthz
+curl -fsS http://localhost:8080/api/v1/readyz
 curl -fsS http://localhost:8080/api/v1/runtime
-curl -fsS http://localhost:8080/api/v1/swarm
 ```
 
 Expected signals:
 
-- health endpoint returns `{"status":"ok"}`
-- runtime reports `mode=prod`
-- swarm endpoint returns live managers/workers data
-- UI reflects `live`, `stale`, or `disconnected` freshness correctly
+- `readyz` reports database readiness
+- `runtime` shows persistent storage enabled
+- the UI exposes cluster switching, approvals, and assistant sessions
+- backend restarts do not lose incidents, audit entries, action runs, approvals, or assistant history
 
-## 8) Deployment models
+## 6) Roll forward and rollback
 
-### Compose on VPS
-
-Use scripts in `scripts/` with `docker-compose.yml`.
-
-### Docker Swarm stack
-
-Use overlays in `deploy/overlays/`:
-
-- `dev/stack.yml`
-- `demo/stack.yml`
-- `prod/stack.yml`
-
-Example:
+Roll forward by updating image tags and redeploying:
 
 ```bash
+export SWARMLENS_IMAGE=ghcr.io/anouarmohamed/swarmlens:<new-tag>
+export SWARMLENS_PREDICTOR_IMAGE=ghcr.io/anouarmohamed/swarmlens-predictor:<new-tag>
 docker stack deploy -c deploy/overlays/prod/stack.yml swarmlens
 ```
 
-## 9) Operational recommendations
+If a rollout fails, Swarm uses the stack's rollback policy automatically. You can also force a previous image tag and redeploy.
 
-- Put SwarmLens behind TLS reverse proxy and authentication boundary.
-- Restrict API ingress to trusted networks.
-- Centralize logs and metrics.
-- Persist audit/history data externally if required for compliance.
-- Add host-level backups for `.env`, secret metadata, and deploy history.
+## 7) Compose-based production-like testing
+
+For a single-host validation environment, use `docker-compose.yml`:
+
+```bash
+cp .env.example .env
+docker compose up --build
+```
+
+That stack now includes:
+
+- `postgres`
+- `migrate`
+- `backend`
+- `predictor`
+
+## 8) Hardening checklist
+
+- Put SwarmLens behind TLS.
+- Set `SESSION_COOKIE_SECURE=true` in production.
+- Restrict `CORS_ALLOW_ORIGINS` to exact operator origins.
+- Keep `WRITE_APPROVAL_REQUIRED=true`.
+- Keep `AUTH_TOKENS_FILE` populated with a break-glass admin token.
+- Back up the Postgres volume and external secret material.

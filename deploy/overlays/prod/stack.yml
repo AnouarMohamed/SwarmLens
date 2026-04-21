@@ -1,7 +1,53 @@
-version: "3.9"
-
 services:
-  swarmlens:
+  postgres:
+    image: postgres:16-alpine
+    deploy:
+      replicas: 1
+      placement:
+        constraints: [node.role == manager]
+      restart_policy:
+        condition: on-failure
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+        reservations:
+          cpus: "0.1"
+          memory: 128M
+    environment:
+      POSTGRES_DB: swarmlens
+      POSTGRES_USER: swarmlens
+      POSTGRES_PASSWORD_FILE: /run/secrets/swarmlens_postgres_password
+    secrets:
+      - swarmlens_postgres_password
+    volumes:
+      - swarmlens_postgres_data:/var/lib/postgresql/data
+    networks: [swarmlens_net]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U swarmlens -d swarmlens"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  migrate:
+    image: ${SWARMLENS_IMAGE:-ghcr.io/anouarmohamed/swarmlens:latest}
+    deploy:
+      replicas: 1
+      placement:
+        constraints: [node.role == manager]
+      restart_policy:
+        condition: none
+    environment:
+      APP_MODE: prod
+      DEFAULT_CLUSTER_NAME: primary
+      DOCKER_HOST: unix:///var/run/docker.sock
+      DATABASE_URL_FILE: /run/secrets/swarmlens_database_url
+      RUN_MIGRATIONS_ONLY: "true"
+    secrets:
+      - swarmlens_database_url
+    networks: [swarmlens_net]
+
+  backend:
     image: ${SWARMLENS_IMAGE:-ghcr.io/anouarmohamed/swarmlens:latest}
     deploy:
       replicas: 1
@@ -22,9 +68,11 @@ services:
         parallelism: 1
         delay: 10s
         failure_action: rollback
+        order: start-first
       rollback_config:
         parallelism: 1
         delay: 5s
+        order: stop-first
     ports:
       - target: 8080
         published: 8080
@@ -33,17 +81,43 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     environment:
       APP_MODE: prod
+      DEFAULT_CLUSTER_NAME: primary
+      DOCKER_HOST: unix:///var/run/docker.sock
+      DATABASE_URL_FILE: /run/secrets/swarmlens_database_url
       AUTH_ENABLED: "true"
+      AUTH_PROVIDER: oidc
       AUTH_TOKENS_FILE: /run/secrets/swarmlens_auth_tokens
-      WRITE_ACTIONS_ENABLED: "false"
+      AUTH_OIDC_ISSUER_URL: ${AUTH_OIDC_ISSUER_URL}
+      AUTH_OIDC_CLIENT_ID: ${AUTH_OIDC_CLIENT_ID}
+      AUTH_OIDC_CLIENT_SECRET_FILE: /run/secrets/swarmlens_oidc_client_secret
+      AUTH_OIDC_REDIRECT_URL: ${AUTH_OIDC_REDIRECT_URL}
+      AUTH_OIDC_SCOPES: ${AUTH_OIDC_SCOPES:-openid,profile,email,groups}
+      AUTH_OIDC_GROUPS_CLAIM: ${AUTH_OIDC_GROUPS_CLAIM:-groups}
+      AUTH_OIDC_VIEWER_GROUPS: ${AUTH_OIDC_VIEWER_GROUPS}
+      AUTH_OIDC_OPERATOR_GROUPS: ${AUTH_OIDC_OPERATOR_GROUPS}
+      AUTH_OIDC_ADMIN_GROUPS: ${AUTH_OIDC_ADMIN_GROUPS}
+      CORS_ALLOW_ORIGINS: ${CORS_ALLOW_ORIGINS}
+      SESSION_COOKIE_NAME: ${SESSION_COOKIE_NAME:-swarmlens_session}
+      SESSION_COOKIE_SECURE: "true"
+      SESSION_TTL_HOURS: ${SESSION_TTL_HOURS:-12}
+      WRITE_ACTIONS_ENABLED: "true"
       WRITE_APPROVAL_REQUIRED: "true"
+      ACTION_SAFE_SCALE_DELTA: ${ACTION_SAFE_SCALE_DELTA:-2}
+      LIVE_ACTION_POLICY: read_only_dry_run
       RATE_LIMIT_ENABLED: "true"
       DIAGNOSTICS_SCHEDULE: "60"
+      SNAPSHOT_STALE_SECONDS: "45"
       PREDICTOR_BASE_URL: http://predictor:8001
       PREDICTOR_SHARED_SECRET_FILE: /run/secrets/swarmlens_predictor_secret
+      ASSISTANT_PROVIDER: ${ASSISTANT_PROVIDER:-none}
+      ASSISTANT_API_BASE_URL: ${ASSISTANT_API_BASE_URL:-}
+      ASSISTANT_API_KEY: ${ASSISTANT_API_KEY:-}
+      ASSISTANT_MODEL: ${ASSISTANT_MODEL:-gpt-4o-mini}
     secrets:
       - swarmlens_auth_tokens
       - swarmlens_predictor_secret
+      - swarmlens_database_url
+      - swarmlens_oidc_client_secret
     networks: [swarmlens_net]
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/api/v1/healthz"]
@@ -83,8 +157,18 @@ networks:
     driver: overlay
     attachable: false
 
+volumes:
+  swarmlens_postgres_data:
+    driver: local
+
 secrets:
   swarmlens_auth_tokens:
     external: true
   swarmlens_predictor_secret:
+    external: true
+  swarmlens_database_url:
+    external: true
+  swarmlens_postgres_password:
+    external: true
+  swarmlens_oidc_client_secret:
     external: true

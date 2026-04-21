@@ -1,6 +1,7 @@
 import type { SVGProps } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useClusterStore } from '../../store/clusterStore'
+import { useControlPlaneStore } from '../../store/controlPlaneStore'
 import {
   AuditIcon,
   ChevronDownIcon,
@@ -12,6 +13,7 @@ import {
   OverviewIcon,
   SecretIcon,
   ServiceIcon,
+  ShieldIcon,
   StackIcon,
   TaskIcon,
   VolumeIcon,
@@ -68,6 +70,13 @@ const NAV_ITEMS: NavItem[] = [
     group: 'Operations',
     description: 'Review write operations, actors, and reconciliation history.',
     icon: AuditIcon,
+  },
+  {
+    to: '/approvals',
+    label: 'Approvals',
+    group: 'Operations',
+    description: 'Approve or reject guarded live actions and inspect execution history.',
+    icon: ShieldIcon,
   },
   {
     to: '/assistant',
@@ -142,9 +151,17 @@ export function Sidebar({ open, onClose }: SidebarProps) {
   const connectionState = useClusterStore((s) => s.connectionState)
   const error = useClusterStore((s) => s.error)
   const fetchAll = useClusterStore((s) => s.fetchAll)
+  const { clusters, selectedClusterID, approvals } = useControlPlaneStore()
+
+  const activeCluster =
+    clusters.find((cluster) => cluster.id === selectedClusterID) ??
+    clusters.find((cluster) => cluster.default) ??
+    clusters[0] ??
+    null
 
   const mode = (swarm?.mode ?? 'demo').toUpperCase()
-  const clusterShort = swarm?.clusterID ? `cluster/${swarm.clusterID.slice(0, 20)}` : 'cluster/unset'
+  const clusterShort =
+    activeCluster?.name ?? (swarm?.clusterID ? `cluster/${swarm.clusterID.slice(0, 20)}` : 'cluster/unset')
   const disconnected = connectionState === 'disconnected' || Boolean(error)
 
   const healthyStacks = stacks.filter((stack) => stack.runningServices >= stack.serviceCount).length
@@ -210,6 +227,11 @@ export function Sidebar({ open, onClose }: SidebarProps) {
             <ChevronDownIcon className="h-4 w-4 text-text-secondary" />
           </button>
           <p className="mt-2 industrial-label text-text-tertiary">{mode} environment</p>
+          {activeCluster?.health ? (
+            <p className="mt-2 industrial-label text-text-tertiary">
+              {activeCluster.health.freshness.toUpperCase()} · {activeCluster.health.managers} managers · {activeCluster.health.workers} workers
+            </p>
+          ) : null}
 
           <div className="mt-4">
             <p className="industrial-label text-text-secondary">
@@ -271,7 +293,9 @@ export function Sidebar({ open, onClose }: SidebarProps) {
             <div>
               <p className="industrial-label text-text-secondary">Operator Tip</p>
               <p className="mt-2 text-[12px] leading-relaxed text-text-secondary">{operatorTip}</p>
-              <p className="mt-2 industrial-data text-[11px] text-text-tertiary">Shortcut: G then D</p>
+              <p className="mt-2 industrial-data text-[11px] text-text-tertiary">
+                Pending approvals: {approvals.length}
+              </p>
             </div>
           )}
         </footer>

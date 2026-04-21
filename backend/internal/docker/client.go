@@ -10,6 +10,7 @@ import (
 	dockerclient "github.com/docker/docker/client"
 
 	"github.com/AnouarMohamed/swarmlens/backend/internal/config"
+	"github.com/AnouarMohamed/swarmlens/backend/internal/model"
 )
 
 // Client wraps the Docker client with SwarmLens-specific helpers.
@@ -21,19 +22,43 @@ type Client struct {
 // New creates a Docker client from config.
 // In demo mode, returns a Client with demo=true; no real connection is made.
 func New(cfg config.Config) (*Client, error) {
+	mode := model.ClusterConnectionDirect
 	if cfg.IsDemo() {
+		mode = model.ClusterConnectionDemo
+	}
+	return newClient(cfg.DockerHost, mode, cfg.DockerTLSVerify, cfg.DockerCertPath)
+}
+
+func NewForCluster(cfg config.Config, cluster model.Cluster) (*Client, error) {
+	mode := cluster.ConnectionMode
+	if mode == "" {
+		mode = model.ClusterConnectionDirect
+	}
+	dockerHost := cluster.DockerHost
+	if dockerHost == "" {
+		dockerHost = cfg.DockerHost
+	}
+	certRef := cluster.CertRef
+	if certRef == "" {
+		certRef = cfg.DockerCertPath
+	}
+	return newClient(dockerHost, mode, cluster.TLSEnabled, certRef)
+}
+
+func newClient(dockerHost string, mode model.ClusterConnectionMode, tlsVerify bool, certPath string) (*Client, error) {
+	if mode == model.ClusterConnectionDemo {
 		return &Client{demo: true}, nil
 	}
 
 	opts := []dockerclient.Opt{
-		dockerclient.WithHost(cfg.DockerHost),
+		dockerclient.WithHost(dockerHost),
 		dockerclient.WithAPIVersionNegotiation(),
 	}
 
-	if cfg.DockerTLSVerify && cfg.DockerCertPath != "" {
-		cacert := fmt.Sprintf("%s/ca.pem", cfg.DockerCertPath)
-		cert := fmt.Sprintf("%s/cert.pem", cfg.DockerCertPath)
-		key := fmt.Sprintf("%s/key.pem", cfg.DockerCertPath)
+	if tlsVerify && certPath != "" {
+		cacert := fmt.Sprintf("%s/ca.pem", certPath)
+		cert := fmt.Sprintf("%s/cert.pem", certPath)
+		key := fmt.Sprintf("%s/key.pem", certPath)
 
 		if _, err := os.Stat(cacert); err != nil {
 			return nil, fmt.Errorf("docker TLS: ca.pem not found at %s", cacert)

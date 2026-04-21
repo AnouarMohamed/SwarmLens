@@ -11,7 +11,7 @@ interface DiagnosticsState {
   error: string | null
 
   fetch: () => Promise<void>
-  run: () => Promise<void>
+  run: (reason?: string) => Promise<void>
 }
 
 export const useDiagnosticsStore = create<DiagnosticsState>((set) => ({
@@ -35,11 +35,12 @@ export const useDiagnosticsStore = create<DiagnosticsState>((set) => ({
     }
   },
 
-  run: async () => {
+  run: async (reason = 'Operator requested diagnostics run from the UI.') => {
     set({ running: true, error: null })
     const start = Date.now()
     try {
-      const findings = await api.diagnostics.run()
+      await api.diagnostics.run(reason)
+      const findings = await api.diagnostics.list()
       const finish = Date.now()
       set({
         findings: findings ?? [],

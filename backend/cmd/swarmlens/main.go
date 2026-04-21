@@ -12,6 +12,7 @@ import (
 
 	"github.com/AnouarMohamed/swarmlens/backend/internal/config"
 	"github.com/AnouarMohamed/swarmlens/backend/internal/httpapi"
+	"github.com/AnouarMohamed/swarmlens/backend/internal/store"
 )
 
 func main() {
@@ -30,6 +31,17 @@ func main() {
 		"auth", cfg.AuthEnabled,
 		"writes", cfg.WriteActionsEnabled,
 	)
+
+	if os.Getenv("RUN_MIGRATIONS_ONLY") == "true" {
+		st, err := store.New(context.Background(), cfg)
+		if err != nil {
+			slog.Error("failed to run migrations", "error", err)
+			os.Exit(1)
+		}
+		defer st.Close()
+		slog.Info("database migrations completed")
+		return
+	}
 
 	router, err := httpapi.NewRouter(cfg, logger)
 	if err != nil {

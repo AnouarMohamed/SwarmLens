@@ -1,7 +1,9 @@
 import { useMemo } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useClusterStore } from '../../store/clusterStore'
+import { useControlPlaneStore } from '../../store/controlPlaneStore'
 import { useDiagnosticsStore } from '../../store/diagnosticsStore'
+import { useSessionStore } from '../../store/sessionStore'
 import { relativeTime } from '../../lib/utils'
 import {
   CheckCircleIcon,
@@ -28,6 +30,7 @@ const TITLES: Record<string, string> = {
   '/diagnostics': 'Diagnostics',
   '/incidents': 'Incidents',
   '/audit': 'Audit Trail',
+  '/approvals': 'Approvals',
   '/assistant': 'Assistant',
 }
 
@@ -62,11 +65,19 @@ export function Topbar({ onOpenSidebar }: TopbarProps) {
   const { swarm, nodes, services, lastRefresh, loading, fetchAll, error, connectionState } =
     useClusterStore()
   const { run, running, findings } = useDiagnosticsStore()
+  const { clusters, selectedClusterID, setSelectedCluster, approvals } = useControlPlaneStore()
+  const { me, loading: sessionLoading, login, logout } = useSessionStore()
+
+  const activeCluster =
+    clusters.find((cluster) => cluster.id === selectedClusterID) ??
+    clusters.find((cluster) => cluster.default) ??
+    clusters[0] ??
+    null
 
   const disconnected =
     connectionState === 'disconnected' || Boolean(error) || swarm?.freshness === 'disconnected'
   const mode = swarm?.mode?.toUpperCase() ?? 'DEMO'
-  const clusterName = swarm?.clusterID ? `cluster/${swarm.clusterID.slice(0, 20)}` : 'cluster/unset'
+  const clusterName = activeCluster?.name ?? (swarm?.clusterID ? `cluster/${swarm.clusterID.slice(0, 20)}` : 'cluster/unset')
 
   const criticalCount = findings.filter((finding) => finding.severity === 'critical').length
   const warningCount = findings.filter(
@@ -92,7 +103,8 @@ export function Topbar({ onOpenSidebar }: TopbarProps) {
   }, [swarm?.lastSyncAt, lastRefresh])
 
   const connectionLabel = disconnected ? 'Disconnected' : connectionState === 'connecting' ? 'Connecting' : 'Connected'
-  const disableDiagnostics = running || disconnected
+  const canOperate = me ? me.authenticated && me.role !== 'viewer' : true
+  const disableDiagnostics = running || disconnected || !canOperate
   const operationalSummary = disconnected
     ? 'Live telemetry paused'
     : health === 'Degraded'
@@ -149,6 +161,41 @@ export function Topbar({ onOpenSidebar }: TopbarProps) {
               </span>
               <span className="industrial-label inline-flex items-center gap-1.5 text-text-secondary">
                 {freshness}
+              </span>
+            </div>
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <label className="industrial-label" htmlFor="cluster-switcher">
+                Cluster
+              </label>
+              <select
+                id="cluster-switcher"
+                value={selectedClusterID}
+                onChange={(event) => {
+                  void setSelectedCluster(event.target.value)
+                }}
+                className="filter-select min-w-[220px]"
+                disabled={clusters.length === 0}
+              >
+                {clusters.length === 0 ? <option value="">Default cluster</option> : null}
+                {clusters.map((cluster) => (
+                  <option key={cluster.id} value={cluster.id}>
+                    {cluster.name} {cluster.default ? '· default' : ''}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => navigate('/approvals')}
+                className="industrial-action"
+              >
+                Approvals {approvals.length > 0 ? `(${approvals.length})` : '(0)'}
+              </button>
+              <span className="industrial-label text-text-secondary">
+                {sessionLoading
+                  ? 'Authenticating...'
+                  : me?.authenticated
+                    ? `${me.username} · ${me.role} · ${me.provider ?? 'session'}`
+                    : 'Not signed in'}
               </span>
             </div>
           </div>
@@ -212,6 +259,21 @@ export function Topbar({ onOpenSidebar }: TopbarProps) {
                 Open Incidents
               </button>
             </>
+          )}
+          {me?.authenticated ? (
+            <button
+              type="button"
+              onClick={() => {
+                void logout()
+              }}
+              className="industrial-action"
+            >
+              Sign Out
+            </button>
+          ) : (
+            <button type="button" onClick={login} className="industrial-action industrial-action-accent">
+              Sign In
+            </button>
           )}
         </div>
       </div>

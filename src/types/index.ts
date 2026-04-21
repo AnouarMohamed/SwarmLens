@@ -5,6 +5,40 @@ export type Role = 'viewer' | 'operator' | 'admin'
 export type AppMode = 'dev' | 'demo' | 'prod'
 export type Severity = 'critical' | 'high' | 'medium' | 'low' | 'info'
 export type FreshnessState = 'live' | 'stale' | 'disconnected'
+export type ClusterConnectionMode = 'direct' | 'demo'
+
+export interface ClusterHealth {
+  freshness: FreshnessState
+  lastSyncAt?: string
+  lastSyncError?: string
+  managers: number
+  workers: number
+  reachable: boolean
+}
+
+export interface Cluster {
+  id: string
+  name: string
+  dockerHost: string
+  connectionMode: ClusterConnectionMode
+  tlsEnabled: boolean
+  certRef: string
+  enabled: boolean
+  default: boolean
+  createdAt: string
+  updatedAt: string
+  health: ClusterHealth
+}
+
+export interface AuthIdentity {
+  authenticated: boolean
+  username?: string
+  role?: Role
+  provider?: string
+  groups?: string[]
+  csrfToken?: string
+  expiresAt?: string
+}
 
 // ── Swarm ─────────────────────────────────────────────────────────────────────
 export interface SwarmInfo {
@@ -199,6 +233,7 @@ export interface TimelineEntry {
 
 export interface Incident {
   id: string
+  clusterID?: string
   title: string
   description: string
   severity: Severity
@@ -216,6 +251,8 @@ export interface Incident {
 // ── Audit ─────────────────────────────────────────────────────────────────────
 export interface AuditEntry {
   id: string
+  clusterID?: string
+  actionRunID?: string
   actor: string
   role: Role
   action: string
@@ -295,19 +332,108 @@ export interface OpsInsights {
   sourceStrategy: string
 }
 
-export type ActionStatus = 'success' | 'failed' | 'dry_run' | 'blocked'
+export type ActionStatus = 'success' | 'failed' | 'dry_run' | 'blocked' | 'pending_approval'
 
 export interface ActionOutcome {
+  id?: string
+  clusterID?: string
   action: string
   resource: string
   resourceID: string
+  reason?: string
   status: ActionStatus
   mode: string
   executed: boolean
+  approvalID?: string
+  approvalRequired?: boolean
   message: string
   blockedReason?: string
   impact?: string
   plan?: string[]
   auditID?: string
   timestamp: string
+}
+
+export interface ActionRun {
+  id: string
+  clusterID: string
+  action: string
+  resource: string
+  resourceID: string
+  requestedBy: string
+  requestedRole: Role
+  reason: string
+  status: ActionStatus
+  mode: string
+  executed: boolean
+  approvalRequired: boolean
+  approvalID?: string
+  auditID?: string
+  message?: string
+  blockedReason?: string
+  impact?: string
+  plan?: string[]
+  params?: Record<string, unknown>
+  createdAt: string
+  updatedAt: string
+  completedAt?: string
+}
+
+export type ApprovalStatus = 'pending' | 'approved' | 'rejected'
+
+export interface ApprovalRequest {
+  id: string
+  clusterID: string
+  actionRunID: string
+  action: string
+  resource: string
+  resourceID: string
+  requestedBy: string
+  requestedRole: Role
+  reason: string
+  status: ApprovalStatus
+  resolutionReason?: string
+  resolvedBy?: string
+  createdAt: string
+  resolvedAt?: string
+}
+
+export interface AssistantCitation {
+  id: string
+  kind: string
+  title: string
+  locator: string
+  snippet?: string
+}
+
+export interface AssistantActionProposal {
+  title: string
+  action: string
+  resource?: string
+  resourceID?: string
+  reason: string
+  params?: Record<string, unknown>
+  requiresApproval: boolean
+}
+
+export interface AssistantMessage {
+  id: string
+  sessionID: string
+  role: 'user' | 'assistant' | string
+  content: string
+  citations?: AssistantCitation[]
+  actionProposals?: AssistantActionProposal[]
+  createdAt: string
+}
+
+export interface AssistantSession {
+  id: string
+  clusterID: string
+  incidentID?: string
+  title: string
+  createdBy: string
+  lastSummary?: string
+  createdAt: string
+  updatedAt: string
+  messages?: AssistantMessage[]
 }

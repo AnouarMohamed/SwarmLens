@@ -1,4 +1,36 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-swarmlens}
+      POSTGRES_USER: ${POSTGRES_USER:-swarmlens}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-swarmlens}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-swarmlens} -d ${POSTGRES_DB:-swarmlens}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      APP_MODE: ${APP_MODE:-dev}
+      DEFAULT_CLUSTER_NAME: ${DEFAULT_CLUSTER_NAME:-primary}
+      DOCKER_HOST: unix:///var/run/docker.sock
+      DATABASE_URL: ${DATABASE_URL:-postgres://swarmlens:swarmlens@postgres:5432/swarmlens?sslmode=disable}
+      RUN_MIGRATIONS_ONLY: "true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
   backend:
     build:
       context: .
@@ -8,21 +40,45 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     environment:
-      APP_MODE:              ${APP_MODE:-demo}
-      DOCKER_HOST:           unix:///var/run/docker.sock
-      AUTH_ENABLED:          ${AUTH_ENABLED:-false}
-      AUTH_TOKENS:           ${AUTH_TOKENS:-}
-      AUTH_TOKENS_FILE:      ${AUTH_TOKENS_FILE:-}
+      APP_MODE: ${APP_MODE:-dev}
+      DEFAULT_CLUSTER_NAME: ${DEFAULT_CLUSTER_NAME:-primary}
+      DOCKER_HOST: unix:///var/run/docker.sock
+      DATABASE_URL: ${DATABASE_URL:-postgres://swarmlens:swarmlens@postgres:5432/swarmlens?sslmode=disable}
+      AUTH_ENABLED: ${AUTH_ENABLED:-false}
+      AUTH_TOKENS: ${AUTH_TOKENS:-}
+      AUTH_TOKENS_FILE: ${AUTH_TOKENS_FILE:-}
+      AUTH_PROVIDER: ${AUTH_PROVIDER:-}
+      AUTH_OIDC_ISSUER_URL: ${AUTH_OIDC_ISSUER_URL:-}
+      AUTH_OIDC_CLIENT_ID: ${AUTH_OIDC_CLIENT_ID:-}
+      AUTH_OIDC_CLIENT_SECRET: ${AUTH_OIDC_CLIENT_SECRET:-}
+      AUTH_OIDC_REDIRECT_URL: ${AUTH_OIDC_REDIRECT_URL:-}
+      AUTH_OIDC_SCOPES: ${AUTH_OIDC_SCOPES:-openid,profile,email,groups}
+      AUTH_OIDC_GROUPS_CLAIM: ${AUTH_OIDC_GROUPS_CLAIM:-groups}
+      AUTH_OIDC_VIEWER_GROUPS: ${AUTH_OIDC_VIEWER_GROUPS:-}
+      AUTH_OIDC_OPERATOR_GROUPS: ${AUTH_OIDC_OPERATOR_GROUPS:-}
+      AUTH_OIDC_ADMIN_GROUPS: ${AUTH_OIDC_ADMIN_GROUPS:-}
+      CORS_ALLOW_ORIGINS: ${CORS_ALLOW_ORIGINS:-}
+      SESSION_COOKIE_NAME: ${SESSION_COOKIE_NAME:-swarmlens_session}
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
+      SESSION_TTL_HOURS: ${SESSION_TTL_HOURS:-12}
       WRITE_ACTIONS_ENABLED: ${WRITE_ACTIONS_ENABLED:-false}
-      PREDICTOR_BASE_URL:    http://predictor:8001
+      WRITE_APPROVAL_REQUIRED: ${WRITE_APPROVAL_REQUIRED:-true}
+      ACTION_SAFE_SCALE_DELTA: ${ACTION_SAFE_SCALE_DELTA:-2}
+      LIVE_ACTION_POLICY: ${LIVE_ACTION_POLICY:-read_only_dry_run}
+      SNAPSHOT_STALE_SECONDS: ${SNAPSHOT_STALE_SECONDS:-45}
+      PREDICTOR_BASE_URL: http://predictor:8001
       PREDICTOR_SHARED_SECRET: ${PREDICTOR_SHARED_SECRET:-dev-secret}
       PREDICTOR_SHARED_SECRET_FILE: ${PREDICTOR_SHARED_SECRET_FILE:-}
-      ASSISTANT_PROVIDER:    ${ASSISTANT_PROVIDER:-none}
+      ASSISTANT_PROVIDER: ${ASSISTANT_PROVIDER:-none}
       ASSISTANT_API_BASE_URL: ${ASSISTANT_API_BASE_URL:-}
-      ASSISTANT_API_KEY:     ${ASSISTANT_API_KEY:-}
+      ASSISTANT_API_KEY: ${ASSISTANT_API_KEY:-}
       ASSISTANT_API_KEY_FILE: ${ASSISTANT_API_KEY_FILE:-}
-      ASSISTANT_MODEL:       ${ASSISTANT_MODEL:-}
+      ASSISTANT_MODEL: ${ASSISTANT_MODEL:-}
     depends_on:
+      migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
       predictor:
         condition: service_healthy
     restart: unless-stopped
@@ -47,3 +103,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 3
+
+volumes:
+  postgres_data:

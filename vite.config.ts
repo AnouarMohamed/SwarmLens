@@ -20,6 +20,7 @@ export default defineConfig({
         manualChunks: {
           react: ['react', 'react-dom', 'react-router-dom'],
           state: ['zustand'],
+          charts: ['echarts', 'echarts-for-react'],
         },
       },
     },

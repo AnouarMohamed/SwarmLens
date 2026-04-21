@@ -1,11 +1,13 @@
 import { useEffect } from 'react'
 import { api } from '../lib/api'
 import { useClusterStore } from '../store/clusterStore'
+import { useControlPlaneStore } from '../store/controlPlaneStore'
 import type { SwarmEvent } from '../types'
 
 export function useEventStream() {
   const pushEvent = useClusterStore((s) => s.pushEvent)
   const setConnectionState = useClusterStore((s) => s.setConnectionState)
+  const selectedClusterID = useControlPlaneStore((s) => s.selectedClusterID)
 
   useEffect(() => {
     let source: EventSource | null = null
@@ -41,5 +43,5 @@ export function useEventStream() {
       source?.close()
       clearTimeout(retryTimeout)
     }
-  }, [pushEvent, setConnectionState])
+  }, [pushEvent, selectedClusterID, setConnectionState])
 }

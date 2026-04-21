@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -8,31 +9,25 @@ import (
 	"time"
 
 	"github.com/AnouarMohamed/swarmlens/backend/internal/config"
-	"github.com/AnouarMohamed/swarmlens/backend/internal/docker"
-	"github.com/AnouarMohamed/swarmlens/backend/internal/intelligence"
-	"github.com/AnouarMohamed/swarmlens/backend/internal/intelligence/plugins"
 	"github.com/AnouarMohamed/swarmlens/backend/internal/model"
-	"github.com/AnouarMohamed/swarmlens/backend/internal/state"
 )
 
-func newDiagnosticsTestDeps() *deps {
-	d := &deps{
-		cfg: config.Config{
-			DiagnosticsSchedule:  60,
-			SnapshotStaleSeconds: 45,
-		},
-		cache:  state.New(),
-		engine: intelligence.New(plugins.Register()),
-	}
-	d.cache.SetSnapshot(docker.DemoSnapshot())
-	return d
+func newDiagnosticsTestDeps(t *testing.T) (*deps, model.Cluster, *clusterRuntime) {
+	t.Helper()
+	return newTestDeps(t, config.Config{
+		AppMode:              "demo",
+		DiagnosticsSchedule:  60,
+		SnapshotStaleSeconds: 45,
+	})
 }
 
 func TestHandleDiagnosticsListAutoRunsWhenCacheIsEmpty(t *testing.T) {
-	d := newDiagnosticsTestDeps()
+	d, cluster, runtime := newDiagnosticsTestDeps(t)
+	runtime.diag.set(nil, time.Time{})
 
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/diagnostics", nil)
+	req = req.WithContext(context.WithValue(context.WithValue(req.Context(), clusterKey, cluster), runtimeKey, runtime))
 	d.handleDiagnosticsList(rr, req)
 
 	if rr.Code != http.StatusOK {
@@ -55,7 +50,7 @@ func TestHandleDiagnosticsListAutoRunsWhenCacheIsEmpty(t *testing.T) {
 		t.Fatalf("expected meta.total=%d, got %d", len(resp.Data), resp.Meta.Total)
 	}
 
-	cached, ranAt := d.diag.snapshot()
+	cached, ranAt := runtime.diag.snapshot()
 	if len(cached) == 0 {
 		t.Fatalf("expected diagnostics cache to be populated")
 	}
@@ -65,17 +60,18 @@ func TestHandleDiagnosticsListAutoRunsWhenCacheIsEmpty(t *testing.T) {
 }
 
 func TestHandleDiagnosticsListAppliesSeverityFilter(t *testing.T) {
-	d := newDiagnosticsTestDeps()
-	all := d.runDiagnostics()
+	d, cluster, runtime := newDiagnosticsTestDeps(t)
+	all := d.runDiagnostics(context.Background(), runtime)
 	if len(all) == 0 {
 		t.Fatalf("expected at least one finding for filter test")
 	}
 
 	targetSeverity := string(all[0].Severity)
-	d.diag.set(all, time.Now())
+	runtime.diag.set(all, time.Now())
 
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/diagnostics?severity="+targetSeverity, nil)
+	req = req.WithContext(context.WithValue(context.WithValue(req.Context(), clusterKey, cluster), runtimeKey, runtime))
 	d.handleDiagnosticsList(rr, req)
 
 	if rr.Code != http.StatusOK {
@@ -96,12 +92,13 @@ func TestHandleDiagnosticsListAppliesSeverityFilter(t *testing.T) {
 }
 
 func TestHandleDiagnosticsGetReturnsNotFoundForUnknownID(t *testing.T) {
-	d := newDiagnosticsTestDeps()
-	d.diag.set(d.runDiagnostics(), time.Now())
+	d, cluster, runtime := newDiagnosticsTestDeps(t)
+	runtime.diag.set(d.runDiagnostics(context.Background(), runtime), time.Now())
 
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/diagnostics/missing", nil)
 	req.SetPathValue("id", "missing")
+	req = req.WithContext(context.WithValue(context.WithValue(req.Context(), clusterKey, cluster), runtimeKey, runtime))
 	d.handleDiagnosticsGet(rr, req)
 
 	if rr.Code != http.StatusNotFound {

@@ -9,6 +9,8 @@ func (d *deps) registerObsRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/metrics/prometheus", d.handleMetricsPrometheus)
 	mux.HandleFunc("GET /api/v1/runtime", d.handleRuntime)
 	mux.HandleFunc("GET /api/v1/openapi.yaml", d.handleOpenAPI)
-	mux.HandleFunc("GET /api/v1/ops/metrics", d.authMiddleware(d.handleOpsMetrics))
-	mux.HandleFunc("GET /api/v1/ops/insights", d.authMiddleware(d.handleOpsInsights))
+	mux.HandleFunc("GET /api/v1/ops/metrics", d.authMiddleware(d.clusterMiddleware(d.handleOpsMetrics)))
+	mux.HandleFunc("GET /api/v1/ops/insights", d.authMiddleware(d.clusterMiddleware(d.handleOpsInsights)))
+	mux.HandleFunc("GET /api/v1/clusters/{clusterID}/ops/metrics", d.authMiddleware(d.clusterMiddleware(d.handleOpsMetrics)))
+	mux.HandleFunc("GET /api/v1/clusters/{clusterID}/ops/insights", d.authMiddleware(d.clusterMiddleware(d.handleOpsInsights)))
 }

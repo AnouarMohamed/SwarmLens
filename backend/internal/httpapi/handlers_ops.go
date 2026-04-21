@@ -15,10 +15,11 @@ import (
 
 func (d *deps) handleOpsMetrics(w http.ResponseWriter, r *http.Request) {
 	snap, freshness, lastUpdated, _ := d.snapshotForRequest(r)
-	history := d.cache.GetHistory()
+	runtime := runtimeFrom(r.Context())
+	history := runtime.cache.GetHistory()
 	if len(history) == 0 {
-		d.cache.SetSnapshot(snap)
-		history = d.cache.GetHistory()
+		runtime.cache.SetSnapshot(snap)
+		history = runtime.cache.GetHistory()
 	}
 
 	writeOK(w, model.OpsMetrics{
@@ -31,15 +32,16 @@ func (d *deps) handleOpsMetrics(w http.ResponseWriter, r *http.Request) {
 
 func (d *deps) handleOpsInsights(w http.ResponseWriter, r *http.Request) {
 	snap, freshness, _, _ := d.snapshotForRequest(r)
-	findings := d.latestFindings()
+	runtime := runtimeFrom(r.Context())
+	findings := d.latestFindings(runtime)
 	if len(findings) == 0 {
-		findings = d.runDiagnostics()
+		findings = d.runDiagnostics(r.Context(), runtime)
 	}
 
-	risk := d.cache.GetRisk()
+	risk := runtime.cache.GetRisk()
 	if risk.UpdatedAt.IsZero() {
 		risk = d.predictRisk(r.Context(), snap)
-		d.cache.SetRisk(risk)
+		runtime.cache.SetRisk(risk)
 	}
 
 	insight := d.buildDeterministicInsights(snap, findings, freshness, risk)
@@ -55,8 +57,8 @@ func (d *deps) handleOpsInsights(w http.ResponseWriter, r *http.Request) {
 	writeOK(w, insight)
 }
 
-func (d *deps) latestFindings() []model.Finding {
-	findings, _ := d.diag.snapshot()
+func (d *deps) latestFindings(runtime *clusterRuntime) []model.Finding {
+	findings, _ := runtime.diag.snapshot()
 	return findings
 }
 

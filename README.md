@@ -2,7 +2,7 @@
 
 SwarmLens is an operations console for Docker Swarm clusters.
 
-It combines deterministic diagnostics, operational telemetry, incident workflows, and AI-assisted triage in one product-oriented UI.
+It combines deterministic diagnostics, operational telemetry, incident workflows, durable approvals, and AI-assisted triage in one product-oriented UI.
 
 ## What you get
 
@@ -10,9 +10,10 @@ It combines deterministic diagnostics, operational telemetry, incident workflows
 - Deterministic diagnostics engine with plugin-based findings and evidence.
 - Operational telemetry and risk trends (`/api/v1/ops/metrics`) with service risk hot spots.
 - Hybrid insights (`/api/v1/ops/insights`): deterministic baseline plus optional OpenAI narrative layer.
-- Action orchestrator (`/api/v1/actions/execute`) with structured outcomes and audit IDs.
-- Incident lifecycle (`/api/v1/incidents`) and append-only audit log (`/api/v1/audit`).
-- Assistant SSE stream (`/api/v1/assistant/chat`) with hypotheses and recommended actions.
+- Action orchestrator (`/api/v1/actions/execute`) with durable action runs, approvals, and audit IDs.
+- Incident lifecycle (`/api/v1/incidents`) and append-only audit log (`/api/v1/audit`) backed by Postgres in production.
+- Assistant SSE stream (`/api/v1/assistant/chat`) with persistent sessions, citations, and action proposals.
+- Cluster-scoped APIs under `/api/v1/clusters/{clusterID}/...` with legacy default-cluster aliases.
 - Grafana panel embedding when frontend `VITE_GRAFANA_*` vars are configured.
 
 ## Runtime modes
@@ -60,7 +61,7 @@ DOCKER_CERT_PATH=/path/to/certs
 
 ## Auth and roles
 
-When `AUTH_ENABLED=true`, send `Authorization: Bearer <token>`.
+When `AUTH_ENABLED=true`, the primary production path is OIDC login with backend-managed session cookies. Static bearer tokens remain available for dev or break-glass use.
 
 Static token format:
 
@@ -123,26 +124,20 @@ npm run docker:down
 
 ## Production deployment
 
-Use the production template and scripts:
+Use the production template and Swarm stack overlay:
 
 ```bash
 cp deploy/env/prod.env.example .env
 chmod 600 .env
-./scripts/preflight-prod.sh
-./scripts/deploy.sh
-```
-
-Rollback:
-
-```bash
-./scripts/rollback.sh
-# or
-ROLLBACK_TO=<sha-or-tag> ./scripts/rollback.sh
+export SWARMLENS_IMAGE=ghcr.io/anouarmohamed/swarmlens:<tag>
+export SWARMLENS_PREDICTOR_IMAGE=ghcr.io/anouarmohamed/swarmlens-predictor:<tag>
+docker stack deploy -c deploy/overlays/prod/stack.yml swarmlens
 ```
 
 Use file-based secrets where possible:
 
 - `AUTH_TOKENS_FILE`
+- `DATABASE_URL_FILE`
 - `PREDICTOR_SHARED_SECRET_FILE`
 - `ASSISTANT_API_KEY_FILE`
 

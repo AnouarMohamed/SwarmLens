@@ -11,14 +11,12 @@ import (
 
 func (d *deps) handleSwarm(w http.ResponseWriter, r *http.Request) {
 	snap, freshness, lastSync, syncErr := d.snapshotForRequest(r)
+	cluster := clusterFrom(r.Context())
+	runtime := runtimeFrom(r.Context())
 	quorum := snap.Managers >= 3 || snap.Managers == 1
-	risk := d.cache.GetRisk()
-	clusterID := "cluster-unset"
-	if len(snap.Nodes) > 0 {
-		clusterID = snap.Nodes[0].ID
-	}
+	risk := runtime.cache.GetRisk()
 	writeOK(w, model.SwarmInfo{
-		ClusterID:     clusterID,
+		ClusterID:     cluster.ID,
 		CreatedAt:     lastSync,
 		UpdatedAt:     lastSync,
 		Managers:      snap.Managers,
@@ -239,5 +237,5 @@ func (d *deps) handleEventsList(w http.ResponseWriter, r *http.Request) {
 }
 
 func (d *deps) handleStreamEvents(w http.ResponseWriter, r *http.Request) {
-	d.bus.ServeSSE(w, r)
+	runtimeFrom(r.Context()).bus.ServeSSE(w, r)
 }

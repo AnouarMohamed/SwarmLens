@@ -11,23 +11,23 @@ import (
 
 const refreshTTL = 12 * time.Second
 
-func (d *deps) ensureSnapshotFresh(ctx context.Context, force bool) error {
+func (d *deps) ensureSnapshotFresh(ctx context.Context, runtime *clusterRuntime, force bool) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	if d.docker == nil {
+	if runtime == nil || runtime.docker == nil {
 		return nil
 	}
-	freshness, last, _ := d.cache.Status(d.staleAfter())
+	freshness, last, _ := runtime.cache.Status(d.staleAfter())
 	if !force && freshness == model.FreshnessLive && !last.IsZero() && time.Since(last) < refreshTTL {
 		return nil
 	}
 
-	d.refreshMu.Lock()
-	defer d.refreshMu.Unlock()
+	runtime.refreshMu.Lock()
+	defer runtime.refreshMu.Unlock()
 
 	// Re-check after waiting for lock.
-	freshness, last, _ = d.cache.Status(d.staleAfter())
+	freshness, last, _ = runtime.cache.Status(d.staleAfter())
 	if !force && freshness == model.FreshnessLive && !last.IsZero() && time.Since(last) < refreshTTL {
 		return nil
 	}
@@ -35,36 +35,35 @@ func (d *deps) ensureSnapshotFresh(ctx context.Context, force bool) error {
 	refreshCtx, cancel := context.WithTimeout(ctx, 6*time.Second)
 	defer cancel()
 
-	snap, events, err := d.docker.Snapshot(refreshCtx)
+	snap, events, err := runtime.docker.Snapshot(refreshCtx)
 	if err != nil {
-		d.cache.SetRefreshError(err.Error())
-		d.logger.Warn("snapshot refresh failed", "error", err)
+		runtime.cache.SetRefreshError(err.Error())
+		d.logger.Warn("snapshot refresh failed", "cluster_id", runtime.cluster.ID, "error", err)
 		return err
 	}
-	d.cache.SetSnapshot(snap)
+	runtime.cache.SetSnapshot(snap)
+	d.refreshCount.Add(1)
 	if len(events) > 0 {
-		d.cache.SetEvents(events)
+		runtime.cache.SetEvents(events)
 		latest := events[0]
-		d.bus.Publish(latest)
+		runtime.bus.Publish(latest)
 	}
 	return nil
 }
 
-func (d *deps) staleAfter() time.Duration {
-	return time.Duration(d.cfg.SnapshotStaleSeconds) * time.Second
-}
-
 func (d *deps) snapshotForRequest(r *http.Request) (model.Snapshot, model.FreshnessState, time.Time, string) {
-	_ = d.ensureSnapshotFresh(r.Context(), false)
-	snap, updated := d.cache.GetSnapshot()
-	freshness, _, errMsg := d.cache.Status(d.staleAfter())
+	runtime := runtimeFrom(r.Context())
+	_ = d.ensureSnapshotFresh(r.Context(), runtime, false)
+	snap, updated := runtime.cache.GetSnapshot()
+	freshness, _, errMsg := runtime.cache.Status(d.staleAfter())
 	return snap, freshness, updated, errMsg
 }
 
 func (d *deps) eventsForRequest(r *http.Request) ([]model.SwarmEvent, model.FreshnessState, time.Time, string) {
-	_ = d.ensureSnapshotFresh(r.Context(), false)
-	freshness, updated, errMsg := d.cache.Status(d.staleAfter())
-	return d.cache.GetEvents(), freshness, updated, errMsg
+	runtime := runtimeFrom(r.Context())
+	_ = d.ensureSnapshotFresh(r.Context(), runtime, false)
+	freshness, updated, errMsg := runtime.cache.Status(d.staleAfter())
+	return runtime.cache.GetEvents(), freshness, updated, errMsg
 }
 
 func (d *deps) freshnessMessage(f model.FreshnessState, errMsg string) string {

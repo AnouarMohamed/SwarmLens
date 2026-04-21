@@ -13,6 +13,7 @@ interface OpsState {
     action: string
     resource?: string
     resourceID?: string
+    reason?: string
     params?: Record<string, unknown>
   }) => Promise<ActionOutcome | null>
 }
@@ -39,7 +40,10 @@ export const useOpsStore = create<OpsState>((set) => ({
 
   runAction: async (payload) => {
     try {
-      const outcome = await api.actions.execute(payload)
+      const outcome = await api.actions.execute({
+        ...payload,
+        reason: payload.reason ?? `Operator requested ${payload.action} from the UI.`,
+      })
       set((state) => ({
         actionLog: [outcome, ...state.actionLog].slice(0, 20),
       }))

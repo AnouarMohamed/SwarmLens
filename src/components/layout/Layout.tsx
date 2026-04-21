@@ -3,6 +3,9 @@ import { Outlet, useLocation } from 'react-router-dom'
 import { Sidebar } from './Sidebar'
 import { Topbar } from './Topbar'
 import { useClusterStore } from '../../store/clusterStore'
+import { useControlPlaneStore } from '../../store/controlPlaneStore'
+import { useDiagnosticsStore } from '../../store/diagnosticsStore'
+import { useSessionStore } from '../../store/sessionStore'
 import { useEventStream } from '../../hooks/useEventStream'
 
 function cn(...parts: Array<string | false | undefined>) {
@@ -11,14 +14,26 @@ function cn(...parts: Array<string | false | undefined>) {
 
 export function Layout() {
   const fetchAll = useClusterStore((s) => s.fetchAll)
+  const fetchDiagnostics = useDiagnosticsStore((s) => s.fetch)
+  const fetchSession = useSessionStore((s) => s.fetch)
+  const fetchClusters = useControlPlaneStore((s) => s.fetchClusters)
+  const refreshWorkflow = useControlPlaneStore((s) => s.refreshWorkflow)
+  const selectedClusterID = useControlPlaneStore((s) => s.selectedClusterID)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const location = useLocation()
 
   useEventStream()
 
   useEffect(() => {
+    void fetchSession()
+    void fetchClusters()
+  }, [fetchClusters, fetchSession])
+
+  useEffect(() => {
     void fetchAll()
-  }, [fetchAll])
+    void fetchDiagnostics()
+    void refreshWorkflow()
+  }, [fetchAll, fetchDiagnostics, refreshWorkflow, selectedClusterID])
 
   useEffect(() => {
     setSidebarOpen(false)

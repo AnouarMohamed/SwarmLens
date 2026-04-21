@@ -1,11 +1,45 @@
+import { useState } from 'react'
 import { useClusterStore } from '../../store/clusterStore'
+import { useControlPlaneStore } from '../../store/controlPlaneStore'
+import { useOpsStore } from '../../store/opsStore'
+import { useSessionStore } from '../../store/sessionStore'
 import { ResourceTable, type Column } from '../../components/ui/ResourceTable'
 import { StatusBadge } from '../../components/ui/Badge'
 import { fmtBytes, fmtNanoCPU, pct } from '../../lib/utils'
 import type { Node } from '../../types'
 
+function cn(...parts: Array<string | false | undefined>) {
+  return parts.filter(Boolean).join(' ')
+}
+
 export function NodesView() {
-  const { nodes, loading } = useClusterStore()
+  const { nodes, loading, fetchNodes } = useClusterStore()
+  const refreshWorkflow = useControlPlaneStore((s) => s.refreshWorkflow)
+  const runAction = useOpsStore((s) => s.runAction)
+  const me = useSessionStore((s) => s.me)
+  const [busyKey, setBusyKey] = useState('')
+  const [notice, setNotice] = useState('')
+  const canOperate = me ? me.authenticated && me.role !== 'viewer' : true
+
+  async function submitAction(node: Node, action: string, reasonDefault: string) {
+    const reason = window.prompt('Reason for this action:', reasonDefault)?.trim()
+    if (!reason) return
+
+    const key = `${action}:${node.id}`
+    setBusyKey(key)
+    try {
+      const outcome = await runAction({
+        action,
+        resource: 'node',
+        resourceID: node.id,
+        reason,
+      })
+      setNotice(outcome ? `${node.hostname}: ${outcome.status} · ${outcome.message}` : `${node.hostname}: action failed`)
+      await Promise.all([fetchNodes(), refreshWorkflow()])
+    } finally {
+      setBusyKey('')
+    }
+  }
 
   const columns: Column<Node>[] = [
     {
@@ -54,6 +88,38 @@ export function NodesView() {
       render: n => <span className="dim mono">{n.engineVersion || '—'}</span>,
       width: '90px',
     },
+    {
+      key: 'actions',
+      header: 'Actions',
+      render: (node) => (
+        <div className="flex flex-wrap items-center gap-3">
+          {node.availability !== 'drain' ? (
+            <button
+              type="button"
+              onClick={() => {
+                void submitAction(node, 'node.drain', `Drain ${node.hostname} for maintenance.`)
+              }}
+              disabled={!canOperate || busyKey === `node.drain:${node.id}`}
+              className={cn('industrial-action', (!canOperate || busyKey === `node.drain:${node.id}`) && 'cursor-not-allowed opacity-35')}
+            >
+              Drain
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                void submitAction(node, 'node.activate', `Return ${node.hostname} to active scheduling.`)
+              }}
+              disabled={!canOperate || busyKey === `node.activate:${node.id}`}
+              className={cn('industrial-action', (!canOperate || busyKey === `node.activate:${node.id}`) && 'cursor-not-allowed opacity-35')}
+            >
+              Activate
+            </button>
+          )}
+        </div>
+      ),
+      width: '120px',
+    },
   ]
 
   return (
@@ -61,6 +127,7 @@ export function NodesView() {
       <div className="view-header">
         <span className="count-label">{nodes.length} nodes</span>
       </div>
+      {notice ? <p className="mb-3 text-sm text-text-secondary">{notice}</p> : null}
       <ResourceTable
         columns={columns}
         rows={nodes}

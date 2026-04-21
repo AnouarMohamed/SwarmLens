@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"runtime/debug"
 	"strings"
 	"sync"
@@ -30,12 +31,42 @@ func principalFrom(ctx context.Context) model.Principal {
 // authMiddleware extracts and validates the principal, then calls the handler.
 func (d *deps) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		p, err := d.authSvc.Extract(r)
+		if !d.cfg.AuthEnabled {
+			ctx := context.WithValue(r.Context(), principalKey, model.Principal{
+				Username: "anonymous",
+				Role:     model.RoleAdmin,
+				Provider: "local",
+			})
+			next(w, r.WithContext(ctx))
+			return
+		}
+
+		ctx := r.Context()
+		if sessionID := readCookie(r, d.cfg.SessionCookieName); sessionID != "" {
+			session, err := d.store.GetSession(ctx, sessionID)
+			if err == nil {
+				_ = d.store.TouchSession(ctx, session.ID)
+				ctx = context.WithValue(ctx, principalKey, model.Principal{
+					Username: session.Username,
+					Role:     session.Role,
+					Provider: session.Provider,
+					Groups:   append([]string(nil), session.Groups...),
+					Session:  session.ID,
+				})
+				ctx = context.WithValue(ctx, sessionKey, session)
+				ctx = context.WithValue(ctx, authMethodKey, "session")
+				next(w, r.WithContext(ctx))
+				return
+			}
+		}
+
+		p, err := d.authSvc.ExtractBearer(r)
 		if err != nil {
 			writeError(w, http.StatusUnauthorized, "unauthorized", err.Error())
 			return
 		}
-		ctx := context.WithValue(r.Context(), principalKey, p)
+		ctx = context.WithValue(ctx, principalKey, p)
+		ctx = context.WithValue(ctx, authMethodKey, "token")
 		next(w, r.WithContext(ctx))
 	}
 }
@@ -56,6 +87,41 @@ func (d *deps) writeMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+func (d *deps) adminMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		p := principalFrom(r.Context())
+		if err := auth.Require(p, model.RoleAdmin); err != nil {
+			writeError(w, http.StatusForbidden, "forbidden", err.Error())
+			return
+		}
+		next(w, r)
+	}
+}
+
+func (d *deps) csrfMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet || r.Method == http.MethodHead || r.Method == http.MethodOptions {
+			next(w, r)
+			return
+		}
+		if authMethodFrom(r.Context()) != "session" {
+			next(w, r)
+			return
+		}
+		session, ok := sessionFrom(r.Context())
+		if !ok {
+			writeError(w, http.StatusUnauthorized, "unauthorized", "session not found")
+			return
+		}
+		token := strings.TrimSpace(r.Header.Get("X-CSRF-Token"))
+		if token == "" || token != session.CSRFToken {
+			writeError(w, http.StatusForbidden, "csrf_invalid", "missing or invalid csrf token")
+			return
+		}
+		next(w, r)
+	}
+}
+
 // ── CORS ──────────────────────────────────────────────────────────────────────
 
 func middlewareCORS(cfg config.Config) func(http.Handler) http.Handler {
@@ -69,7 +135,8 @@ func middlewareCORS(cfg config.Config) func(http.Handler) http.Handler {
 				headers := w.Header()
 				headers.Set("Access-Control-Allow-Origin", origin)
 				headers.Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-				headers.Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Request-Id")
+				headers.Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-CSRF-Token, X-Request-Id")
+				headers.Set("Access-Control-Allow-Credentials", "true")
 				headers.Set("Access-Control-Max-Age", "86400")
 				headers.Set("Vary", appendVary(headers.Get("Vary"), "Origin"))
 			}
@@ -81,6 +148,21 @@ func middlewareCORS(cfg config.Config) func(http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+func readCookie(r *http.Request, name string) string {
+	if name == "" {
+		return ""
+	}
+	cookie, err := r.Cookie(name)
+	if err != nil {
+		return ""
+	}
+	value, err := url.QueryUnescape(cookie.Value)
+	if err != nil {
+		return strings.TrimSpace(cookie.Value)
+	}
+	return strings.TrimSpace(value)
 }
 
 // ── Security headers ──────────────────────────────────────────────────────────

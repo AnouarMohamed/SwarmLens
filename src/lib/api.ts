@@ -1,8 +1,27 @@
 import type {
-  SwarmInfo, Node, Stack, Service, Task, Network,
-  Volume, Secret, Config, SwarmEvent, Finding,
-  Incident, AuditEntry, OpsMetrics, OpsInsights, ActionOutcome,
-  ListResponse, ItemResponse,
+  SwarmInfo,
+  Node,
+  Stack,
+  Service,
+  Task,
+  Network,
+  Volume,
+  Secret,
+  Config,
+  SwarmEvent,
+  Finding,
+  Incident,
+  AuditEntry,
+  OpsMetrics,
+  OpsInsights,
+  ActionOutcome,
+  ListResponse,
+  ItemResponse,
+  Cluster,
+  AuthIdentity,
+  ActionRun,
+  ApprovalRequest,
+  AssistantSession,
 } from '../types'
 
 const BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? '/api/v1'
@@ -14,26 +33,39 @@ class APIError extends Error {
   }
 }
 
-async function get<T>(path: string): Promise<T> {
-  const token = localStorage.getItem('sl_token')
-  const res = await fetch(`${BASE}${path}`, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-  })
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText, code: String(res.status) }))
-    throw new APIError(res.status, err.code, err.error)
-  }
-  return res.json()
+function readToken() {
+  return localStorage.getItem('sl_token') ?? ''
 }
 
-async function post<T>(path: string, body?: unknown): Promise<T> {
-  const token = localStorage.getItem('sl_token')
+function readCSRFToken() {
+  return sessionStorage.getItem('sl_csrf') ?? ''
+}
+
+function selectedClusterID() {
+  return localStorage.getItem('sl_cluster_id')?.trim() ?? ''
+}
+
+function clusterPath(path: string) {
+  const clusterID = selectedClusterID()
+  if (!clusterID) return path
+  return `/clusters/${encodeURIComponent(clusterID)}${path}`
+}
+
+function headersForRequest(method: 'GET' | 'POST' | 'PUT' | 'DELETE', json = false) {
+  const token = readToken()
+  const csrfToken = readCSRFToken()
+  const headers: Record<string, string> = {}
+  if (json) headers['Content-Type'] = 'application/json'
+  if (token) headers.Authorization = `Bearer ${token}`
+  if (method !== 'GET' && csrfToken) headers['X-CSRF-Token'] = csrfToken
+  return headers
+}
+
+async function request<T>(method: 'GET' | 'POST' | 'PUT' | 'DELETE', path: string, body?: unknown): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
+    method,
+    credentials: 'include',
+    headers: headersForRequest(method, body !== undefined),
     body: body !== undefined ? JSON.stringify(body) : undefined,
   })
   if (!res.ok) {
@@ -44,132 +76,146 @@ async function post<T>(path: string, body?: unknown): Promise<T> {
   return res.json()
 }
 
-async function put<T>(path: string, body: unknown): Promise<T> {
-  const token = localStorage.getItem('sl_token')
-  const res = await fetch(`${BASE}${path}`, {
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    body: JSON.stringify(body),
-  })
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText, code: String(res.status) }))
-    throw new APIError(res.status, err.code, err.error)
-  }
-  return res.json()
+function get<T>(path: string) {
+  return request<T>('GET', path)
 }
 
-async function del<T>(path: string): Promise<T> {
-  const token = localStorage.getItem('sl_token')
-  const res = await fetch(`${BASE}${path}`, {
-    method: 'DELETE',
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-  })
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText, code: String(res.status) }))
-    throw new APIError(res.status, err.code, err.error)
-  }
-  if (res.status === 204) return undefined as T
-  return res.json()
+function post<T>(path: string, body?: unknown) {
+  return request<T>('POST', path, body)
+}
+
+function put<T>(path: string, body: unknown) {
+  return request<T>('PUT', path, body)
+}
+
+function del<T>(path: string) {
+  return request<T>('DELETE', path)
 }
 
 function sse(path: string): EventSource {
-  const token = localStorage.getItem('sl_token')
-  const url = token
-    ? `${BASE}${path}?token=${encodeURIComponent(token)}`
-    : `${BASE}${path}`
+  const token = readToken()
+  const url = token ? `${BASE}${path}?token=${encodeURIComponent(token)}` : `${BASE}${path}`
   return new EventSource(url)
 }
 
 export const api = {
+  auth: {
+    me: () => get<ItemResponse<AuthIdentity>>('/auth/me').then((r) => r.data),
+    loginUrl: (returnTo = window.location.pathname + window.location.search) =>
+      `${BASE}/auth/login?returnTo=${encodeURIComponent(returnTo)}`,
+    logout: () => post<ItemResponse<{ ok: boolean }>>('/auth/logout').then((r) => r.data),
+  },
+  clusters: {
+    list: () => get<ListResponse<Cluster>>('/clusters').then((r) => r.data),
+    get: (id: string) => get<ItemResponse<Cluster>>(`/clusters/${id}`).then((r) => r.data),
+    create: (body: unknown) => post<ItemResponse<Cluster>>('/clusters', body).then((r) => r.data),
+    update: (id: string, body: unknown) => put<ItemResponse<Cluster>>(`/clusters/${id}`, body).then((r) => r.data),
+  },
   swarm: {
-    get: () => get<ItemResponse<SwarmInfo>>('/swarm').then(r => r.data),
+    get: () => get<ItemResponse<SwarmInfo>>(clusterPath('/swarm')).then((r) => r.data),
   },
   nodes: {
-    list: () => get<ListResponse<Node>>('/nodes').then(r => r.data),
-    get: (id: string) => get<ItemResponse<Node>>(`/nodes/${id}`).then(r => r.data),
-    drain: (id: string) => post(`/nodes/${id}/drain`),
-    activate: (id: string) => post(`/nodes/${id}/activate`),
+    list: () => get<ListResponse<Node>>(clusterPath('/nodes')).then((r) => r.data),
+    get: (id: string) => get<ItemResponse<Node>>(clusterPath(`/nodes/${id}`)).then((r) => r.data),
+    drain: (id: string, reason: string) => post(clusterPath(`/nodes/${id}/drain?reason=${encodeURIComponent(reason)}`)),
+    activate: (id: string, reason: string) => post(clusterPath(`/nodes/${id}/activate?reason=${encodeURIComponent(reason)}`)),
   },
   stacks: {
-    list: () => get<ListResponse<Stack>>('/stacks').then(r => r.data),
-    get: (name: string) => get<ItemResponse<Stack>>(`/stacks/${name}`).then(r => r.data),
-    deploy: (name: string, body: unknown) => post(`/stacks/${name}/deploy`, body),
-    remove: (name: string) => del(`/stacks/${name}`),
+    list: () => get<ListResponse<Stack>>(clusterPath('/stacks')).then((r) => r.data),
+    get: (name: string) => get<ItemResponse<Stack>>(clusterPath(`/stacks/${name}`)).then((r) => r.data),
+    deploy: (name: string, body: unknown) => post(clusterPath(`/stacks/${name}/deploy`), body),
+    remove: (name: string) => del(clusterPath(`/stacks/${name}`)),
   },
   services: {
-    list: (stack?: string) => get<ListResponse<Service>>(`/services${stack ? `?stack=${stack}` : ''}`).then(r => r.data),
-    get: (id: string) => get<ItemResponse<Service>>(`/services/${id}`).then(r => r.data),
-    scale: (id: string, replicas: number) => post(`/services/${id}/scale`, { replicas }),
-    restart: (id: string) => post(`/services/${id}/restart`),
-    update: (id: string, body: unknown) => post(`/services/${id}/update`, body),
-    rollback: (id: string) => post(`/services/${id}/rollback`),
+    list: (stack?: string) =>
+      get<ListResponse<Service>>(clusterPath(`/services${stack ? `?stack=${stack}` : ''}`)).then((r) => r.data),
+    get: (id: string) => get<ItemResponse<Service>>(clusterPath(`/services/${id}`)).then((r) => r.data),
+    scale: (id: string, replicas: number, reason: string) =>
+      post(clusterPath(`/services/${id}/scale`), { replicas, reason }),
+    restart: (id: string, reason: string) => post(clusterPath(`/services/${id}/restart`), { reason }),
+    update: (id: string, body: unknown) => post(clusterPath(`/services/${id}/update`), body),
+    rollback: (id: string, reason: string) => post(clusterPath(`/services/${id}/rollback`), { reason }),
   },
   tasks: {
     list: (params?: Record<string, string>) => {
-      const qs = params ? '?' + new URLSearchParams(params).toString() : ''
-      return get<ListResponse<Task>>(`/tasks${qs}`).then(r => r.data)
+      const qs = params ? `?${new URLSearchParams(params).toString()}` : ''
+      return get<ListResponse<Task>>(clusterPath(`/tasks${qs}`)).then((r) => r.data)
     },
-    get: (id: string) => get<ItemResponse<Task>>(`/tasks/${id}`).then(r => r.data),
+    get: (id: string) => get<ItemResponse<Task>>(clusterPath(`/tasks/${id}`)).then((r) => r.data),
   },
   networks: {
-    list: () => get<ListResponse<Network>>('/networks').then(r => r.data),
+    list: () => get<ListResponse<Network>>(clusterPath('/networks')).then((r) => r.data),
   },
   volumes: {
-    list: () => get<ListResponse<Volume>>('/volumes').then(r => r.data),
+    list: () => get<ListResponse<Volume>>(clusterPath('/volumes')).then((r) => r.data),
   },
   secrets: {
-    list: () => get<ListResponse<Secret>>('/secrets').then(r => r.data),
+    list: () => get<ListResponse<Secret>>(clusterPath('/secrets')).then((r) => r.data),
   },
   configs: {
-    list: () => get<ListResponse<Config>>('/configs').then(r => r.data),
+    list: () => get<ListResponse<Config>>(clusterPath('/configs')).then((r) => r.data),
   },
   events: {
-    list: (type?: string) => get<ListResponse<SwarmEvent>>(`/events${type ? `?type=${type}` : ''}`).then(r => r.data),
-    stream: () => sse('/stream/events'),
+    list: (type?: string) =>
+      get<ListResponse<SwarmEvent>>(clusterPath(`/events${type ? `?type=${type}` : ''}`)).then((r) => r.data),
+    stream: () => sse(clusterPath('/stream/events')),
   },
   diagnostics: {
-    list: (severity?: string) => get<ListResponse<Finding>>(`/diagnostics${severity ? `?severity=${severity}` : ''}`).then(r => r.data),
-    run: () => post<ListResponse<Finding>>('/diagnostics/run').then(r => r.data),
-    get: (id: string) => get<ItemResponse<Finding>>(`/diagnostics/${id}`).then(r => r.data),
+    list: (severity?: string) =>
+      get<ListResponse<Finding>>(clusterPath(`/diagnostics${severity ? `?severity=${severity}` : ''}`)).then((r) => r.data),
+    run: (reason: string) =>
+      post<ItemResponse<ActionOutcome>>(clusterPath('/actions/execute'), { action: 'diagnostics.run', reason }).then((r) => r.data),
+    get: (id: string) => get<ItemResponse<Finding>>(clusterPath(`/diagnostics/${id}`)).then((r) => r.data),
   },
   incidents: {
-    list: () => get<ListResponse<Incident>>('/incidents').then(r => r.data),
-    create: (body: unknown) => post<ItemResponse<Incident>>('/incidents', body).then(r => r.data),
-    get: (id: string) => get<ItemResponse<Incident>>(`/incidents/${id}`).then(r => r.data),
-    update: (id: string, body: unknown) => put<ItemResponse<Incident>>(`/incidents/${id}`, body).then(r => r.data),
-    resolve: (id: string) => post<ItemResponse<Incident>>(`/incidents/${id}/resolve`).then(r => r.data),
+    list: () => get<ListResponse<Incident>>(clusterPath('/incidents')).then((r) => r.data),
+    create: (body: unknown) => post<ItemResponse<Incident>>(clusterPath('/incidents'), body).then((r) => r.data),
+    get: (id: string) => get<ItemResponse<Incident>>(clusterPath(`/incidents/${id}`)).then((r) => r.data),
+    update: (id: string, body: unknown) => put<ItemResponse<Incident>>(clusterPath(`/incidents/${id}`), body).then((r) => r.data),
+    resolve: (id: string) => post<ItemResponse<Incident>>(clusterPath(`/incidents/${id}/resolve`)).then((r) => r.data),
   },
   audit: {
-    list: (limit = 50, offset = 0) => get<ListResponse<AuditEntry>>(`/audit?limit=${limit}&offset=${offset}`).then(r => r.data),
+    list: (limit = 50, offset = 0) =>
+      get<ListResponse<AuditEntry>>(clusterPath(`/audit?limit=${limit}&offset=${offset}`)).then((r) => r.data),
   },
   ops: {
-    metrics: () => get<ItemResponse<OpsMetrics>>('/ops/metrics').then(r => r.data),
-    insights: () => get<ItemResponse<OpsInsights>>('/ops/insights').then(r => r.data),
+    metrics: () => get<ItemResponse<OpsMetrics>>(clusterPath('/ops/metrics')).then((r) => r.data),
+    insights: () => get<ItemResponse<OpsInsights>>(clusterPath('/ops/insights')).then((r) => r.data),
   },
   actions: {
-    execute: (payload: { action: string; resource?: string; resourceID?: string; params?: Record<string, unknown> }) =>
-      post<ItemResponse<ActionOutcome>>('/actions/execute', payload).then(r => r.data),
+    list: () => get<ListResponse<ActionRun>>(clusterPath('/actions')).then((r) => r.data),
+    execute: (payload: {
+      action: string
+      resource?: string
+      resourceID?: string
+      reason: string
+      params?: Record<string, unknown>
+    }) => post<ItemResponse<ActionOutcome>>(clusterPath('/actions/execute'), payload).then((r) => r.data),
+  },
+  approvals: {
+    list: (status?: string) =>
+      get<ListResponse<ApprovalRequest>>(clusterPath(`/approvals${status ? `?status=${status}` : ''}`)).then((r) => r.data),
+    approve: (id: string) => post<ItemResponse<ActionOutcome>>(clusterPath(`/approvals/${id}/approve`)).then((r) => r.data),
+    reject: (id: string) => post<ItemResponse<ActionOutcome>>(clusterPath(`/approvals/${id}/reject`)).then((r) => r.data),
   },
   assistant: {
+    sessions: () => get<ListResponse<AssistantSession>>(clusterPath('/assistant/sessions')).then((r) => r.data),
+    createSession: (body?: { title?: string; incidentID?: string }) =>
+      post<ItemResponse<AssistantSession>>(clusterPath('/assistant/sessions'), body ?? {}).then((r) => r.data),
+    getSession: (id: string) => get<ItemResponse<AssistantSession>>(clusterPath(`/assistant/sessions/${id}`)).then((r) => r.data),
     chatStream: async (
-      prompt: string,
+      payload: { prompt: string; sessionID?: string; incidentID?: string },
       handlers: {
         onEvent?: (event: string, payload: unknown) => void
         onDone?: () => void
         onError?: (message: string) => void
       } = {},
     ) => {
-      const token = localStorage.getItem('sl_token')
-      const res = await fetch(`${BASE}/assistant/chat`, {
+      const res = await fetch(`${BASE}${clusterPath('/assistant/chat')}`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({ prompt }),
+        credentials: 'include',
+        headers: headersForRequest('POST', true),
+        body: JSON.stringify(payload),
       })
 
       if (!res.ok || !res.body) {
@@ -193,13 +239,13 @@ export const api = {
           const dataLine = lines.find((line) => line.startsWith('data:'))
           const event = eventLine?.slice(6).trim() ?? 'message'
           const data = dataLine?.slice(5).trim() ?? '{}'
-          let payload: unknown = data
+          let payloadData: unknown = data
           try {
-            payload = JSON.parse(data)
+            payloadData = JSON.parse(data)
           } catch {
-            payload = data
+            payloadData = data
           }
-          handlers.onEvent?.(event, payload)
+          handlers.onEvent?.(event, payloadData)
           if (event === 'done') handlers.onDone?.()
         }
       }

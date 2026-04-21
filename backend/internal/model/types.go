@@ -20,6 +20,9 @@ const (
 type Principal struct {
 	Username string
 	Role     Role
+	Provider string
+	Groups   []string
+	Session  string
 }
 
 // ── Swarm cluster ─────────────────────────────────────────────────────────────
@@ -205,6 +208,7 @@ type Finding struct {
 
 type Incident struct {
 	ID               string          `json:"id"`
+	ClusterID        string          `json:"clusterID,omitempty"`
 	Title            string          `json:"title"`
 	Description      string          `json:"description"`
 	Severity         string          `json:"severity"`
@@ -239,17 +243,19 @@ type TimelineEntry struct {
 // ── Audit ─────────────────────────────────────────────────────────────────────
 
 type AuditEntry struct {
-	ID         string      `json:"id"`
-	Actor      string      `json:"actor"`
-	Role       string      `json:"role"`
-	Action     string      `json:"action"`
-	Resource   string      `json:"resource"`
-	ResourceID string      `json:"resourceID"`
-	BeforeSpec interface{} `json:"beforeSpec,omitempty"`
-	AfterSpec  interface{} `json:"afterSpec,omitempty"`
-	Result     string      `json:"result"`
-	Reason     string      `json:"reason,omitempty"`
-	Timestamp  time.Time   `json:"timestamp"`
+	ID          string      `json:"id"`
+	ClusterID   string      `json:"clusterID,omitempty"`
+	ActionRunID string      `json:"actionRunID,omitempty"`
+	Actor       string      `json:"actor"`
+	Role        string      `json:"role"`
+	Action      string      `json:"action"`
+	Resource    string      `json:"resource"`
+	ResourceID  string      `json:"resourceID"`
+	BeforeSpec  interface{} `json:"beforeSpec,omitempty"`
+	AfterSpec   interface{} `json:"afterSpec,omitempty"`
+	Result      string      `json:"result"`
+	Reason      string      `json:"reason,omitempty"`
+	Timestamp   time.Time   `json:"timestamp"`
 }
 
 // ── Snapshot (used by intelligence engine) ───────────────────────────────────
@@ -341,23 +347,29 @@ type OpsInsights struct {
 type ActionStatus string
 
 const (
-	ActionStatusSuccess ActionStatus = "success"
-	ActionStatusFailed  ActionStatus = "failed"
-	ActionStatusDryRun  ActionStatus = "dry_run"
-	ActionStatusBlocked ActionStatus = "blocked"
+	ActionStatusSuccess         ActionStatus = "success"
+	ActionStatusFailed          ActionStatus = "failed"
+	ActionStatusDryRun          ActionStatus = "dry_run"
+	ActionStatusBlocked         ActionStatus = "blocked"
+	ActionStatusPendingApproval ActionStatus = "pending_approval"
 )
 
 type ActionOutcome struct {
-	Action        string       `json:"action"`
-	Resource      string       `json:"resource"`
-	ResourceID    string       `json:"resourceID"`
-	Status        ActionStatus `json:"status"`
-	Mode          string       `json:"mode"`
-	Executed      bool         `json:"executed"`
-	Message       string       `json:"message"`
-	BlockedReason string       `json:"blockedReason,omitempty"`
-	Impact        string       `json:"impact,omitempty"`
-	Plan          []string     `json:"plan,omitempty"`
-	AuditID       string       `json:"auditID,omitempty"`
-	Timestamp     time.Time    `json:"timestamp"`
+	ID               string       `json:"id,omitempty"`
+	ClusterID        string       `json:"clusterID,omitempty"`
+	Action           string       `json:"action"`
+	Resource         string       `json:"resource"`
+	ResourceID       string       `json:"resourceID"`
+	Reason           string       `json:"reason,omitempty"`
+	Status           ActionStatus `json:"status"`
+	Mode             string       `json:"mode"`
+	Executed         bool         `json:"executed"`
+	ApprovalID       string       `json:"approvalID,omitempty"`
+	ApprovalRequired bool         `json:"approvalRequired,omitempty"`
+	Message          string       `json:"message"`
+	BlockedReason    string       `json:"blockedReason,omitempty"`
+	Impact           string       `json:"impact,omitempty"`
+	Plan             []string     `json:"plan,omitempty"`
+	AuditID          string       `json:"auditID,omitempty"`
+	Timestamp        time.Time    `json:"timestamp"`
 }
