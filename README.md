@@ -8,11 +8,11 @@ It combines deterministic diagnostics, operational telemetry, incident workflows
 
 - Live or demo inventory of cluster, nodes, stacks, services, tasks, networks, volumes, secrets, and configs.
 - Deterministic diagnostics engine with plugin-based findings and evidence.
-- Operational telemetry and risk trends (`/api/v1/ops/metrics`) with service risk hot spots.
-- Hybrid insights (`/api/v1/ops/insights`): deterministic baseline plus optional OpenAI narrative layer.
-- Action orchestrator (`/api/v1/actions/execute`) with durable action runs, approvals, and audit IDs.
-- Incident lifecycle (`/api/v1/incidents`) and append-only audit log (`/api/v1/audit`) backed by Postgres in production.
-- Assistant SSE stream (`/api/v1/assistant/chat`) with persistent sessions, citations, and action proposals.
+- Operational telemetry and risk trends (`/api/v1/clusters/{clusterID}/ops/metrics`) with service risk hot spots.
+- Hybrid insights (`/api/v1/clusters/{clusterID}/ops/insights`): deterministic baseline plus optional OpenAI narrative layer.
+- Action orchestrator (`/api/v1/clusters/{clusterID}/actions/execute`) with durable action runs, approvals, and audit IDs.
+- Incident lifecycle (`/api/v1/clusters/{clusterID}/incidents`) and append-only audit log (`/api/v1/clusters/{clusterID}/audit`) backed by Postgres in production.
+- Assistant SSE stream (`/api/v1/clusters/{clusterID}/assistant/chat`) with persistent sessions, citations, and action proposals.
 - Cluster-scoped APIs under `/api/v1/clusters/{clusterID}/...` with legacy default-cluster aliases.
 - Grafana panel embedding when frontend `VITE_GRAFANA_*` vars are configured.
 
@@ -155,6 +155,7 @@ See [docs/CI_CD.md](docs/CI_CD.md).
 ```bash
 npm run lint
 npm run lint:ci
+npm run contracts:generate
 npm run typecheck
 npm run test:web
 npm run test:go

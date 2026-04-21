@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { api } from '../lib/api'
-import type { Incident } from '../types'
+import type { Incident, IncidentCreateRequest } from '../types'
 
 interface IncidentState {
   incidents: Incident[]
@@ -8,7 +8,7 @@ interface IncidentState {
   error: string | null
 
   fetch: () => Promise<void>
-  create: (body: unknown) => Promise<Incident>
+  create: (body: IncidentCreateRequest) => Promise<Incident>
   resolve: (id: string) => Promise<void>
 }
 
@@ -30,7 +30,7 @@ export const useIncidentStore = create<IncidentState>((set) => ({
     }
   },
 
-  create: async (body: unknown) => {
+  create: async (body: IncidentCreateRequest) => {
     const inc = await api.incidents.create(body)
     set((state) => ({ incidents: [inc, ...state.incidents] }))
     return inc

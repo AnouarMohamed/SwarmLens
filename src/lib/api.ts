@@ -18,10 +18,18 @@ import type {
   ListResponse,
   ItemResponse,
   Cluster,
+  ClusterCreateRequest,
+  ClusterUpdateRequest,
   AuthIdentity,
   ActionRun,
+  ActionExecuteRequest,
+  ApprovalStatus,
   ApprovalRequest,
+  IncidentCreateRequest,
+  IncidentUpdateRequest,
   AssistantSession,
+  AssistantSessionCreateRequest,
+  AssistantChatRequest,
 } from '../types'
 
 const BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? '/api/v1'
@@ -108,8 +116,9 @@ export const api = {
   clusters: {
     list: () => get<ListResponse<Cluster>>('/clusters').then((r) => r.data),
     get: (id: string) => get<ItemResponse<Cluster>>(`/clusters/${id}`).then((r) => r.data),
-    create: (body: unknown) => post<ItemResponse<Cluster>>('/clusters', body).then((r) => r.data),
-    update: (id: string, body: unknown) => put<ItemResponse<Cluster>>(`/clusters/${id}`, body).then((r) => r.data),
+    create: (body: ClusterCreateRequest) => post<ItemResponse<Cluster>>('/clusters', body).then((r) => r.data),
+    update: (id: string, body: ClusterUpdateRequest) =>
+      put<ItemResponse<Cluster>>(`/clusters/${id}`, body).then((r) => r.data),
   },
   swarm: {
     get: () => get<ItemResponse<SwarmInfo>>(clusterPath('/swarm')).then((r) => r.data),
@@ -169,9 +178,11 @@ export const api = {
   },
   incidents: {
     list: () => get<ListResponse<Incident>>(clusterPath('/incidents')).then((r) => r.data),
-    create: (body: unknown) => post<ItemResponse<Incident>>(clusterPath('/incidents'), body).then((r) => r.data),
+    create: (body: IncidentCreateRequest) =>
+      post<ItemResponse<Incident>>(clusterPath('/incidents'), body).then((r) => r.data),
     get: (id: string) => get<ItemResponse<Incident>>(clusterPath(`/incidents/${id}`)).then((r) => r.data),
-    update: (id: string, body: unknown) => put<ItemResponse<Incident>>(clusterPath(`/incidents/${id}`), body).then((r) => r.data),
+    update: (id: string, body: IncidentUpdateRequest) =>
+      put<ItemResponse<Incident>>(clusterPath(`/incidents/${id}`), body).then((r) => r.data),
     resolve: (id: string) => post<ItemResponse<Incident>>(clusterPath(`/incidents/${id}/resolve`)).then((r) => r.data),
   },
   audit: {
@@ -184,27 +195,22 @@ export const api = {
   },
   actions: {
     list: () => get<ListResponse<ActionRun>>(clusterPath('/actions')).then((r) => r.data),
-    execute: (payload: {
-      action: string
-      resource?: string
-      resourceID?: string
-      reason: string
-      params?: Record<string, unknown>
-    }) => post<ItemResponse<ActionOutcome>>(clusterPath('/actions/execute'), payload).then((r) => r.data),
+    execute: (payload: ActionExecuteRequest) =>
+      post<ItemResponse<ActionOutcome>>(clusterPath('/actions/execute'), payload).then((r) => r.data),
   },
   approvals: {
-    list: (status?: string) =>
+    list: (status?: ApprovalStatus) =>
       get<ListResponse<ApprovalRequest>>(clusterPath(`/approvals${status ? `?status=${status}` : ''}`)).then((r) => r.data),
     approve: (id: string) => post<ItemResponse<ActionOutcome>>(clusterPath(`/approvals/${id}/approve`)).then((r) => r.data),
     reject: (id: string) => post<ItemResponse<ActionOutcome>>(clusterPath(`/approvals/${id}/reject`)).then((r) => r.data),
   },
   assistant: {
     sessions: () => get<ListResponse<AssistantSession>>(clusterPath('/assistant/sessions')).then((r) => r.data),
-    createSession: (body?: { title?: string; incidentID?: string }) =>
+    createSession: (body?: AssistantSessionCreateRequest) =>
       post<ItemResponse<AssistantSession>>(clusterPath('/assistant/sessions'), body ?? {}).then((r) => r.data),
     getSession: (id: string) => get<ItemResponse<AssistantSession>>(clusterPath(`/assistant/sessions/${id}`)).then((r) => r.data),
     chatStream: async (
-      payload: { prompt: string; sessionID?: string; incidentID?: string },
+      payload: AssistantChatRequest,
       handlers: {
         onEvent?: (event: string, payload: unknown) => void
         onDone?: () => void

@@ -1,69 +1,22 @@
-// Mirrors backend/internal/model/types.go exactly.
-// Keep in sync manually — field names and shapes must match.
+import type { components } from './controlplane.generated'
 
-export type Role = 'viewer' | 'operator' | 'admin'
-export type AppMode = 'dev' | 'demo' | 'prod'
-export type Severity = 'critical' | 'high' | 'medium' | 'low' | 'info'
-export type FreshnessState = 'live' | 'stale' | 'disconnected'
-export type ClusterConnectionMode = 'direct' | 'demo'
+type ContractSchema<Name extends keyof components['schemas']> = components['schemas'][Name]
 
-export interface ClusterHealth {
-  freshness: FreshnessState
-  lastSyncAt?: string
-  lastSyncError?: string
-  managers: number
-  workers: number
-  reachable: boolean
-}
+// Control-plane types are generated from docs/openapi.yaml.
+// Keep manual definitions only for slices that are not modeled in the contract yet.
 
-export interface Cluster {
-  id: string
-  name: string
-  dockerHost: string
-  connectionMode: ClusterConnectionMode
-  tlsEnabled: boolean
-  certRef: string
-  enabled: boolean
-  default: boolean
-  createdAt: string
-  updatedAt: string
-  health: ClusterHealth
-}
-
-export interface AuthIdentity {
-  authenticated: boolean
-  username?: string
-  role?: Role
-  provider?: string
-  groups?: string[]
-  csrfToken?: string
-  expiresAt?: string
-}
-
-// ── Swarm ─────────────────────────────────────────────────────────────────────
-export interface SwarmInfo {
-  clusterID: string
-  createdAt: string
-  updatedAt: string
-  managers: number
-  workers: number
-  quorumHealthy: boolean
-  raftState: 'healthy' | 'degraded' | 'single' | 'unknown'
-  mode: AppMode
-  writeEnabled: boolean
-  freshness: FreshnessState
-  lastSyncAt: string
-  syncError?: string
-  risk: RiskAssessment
-}
-
-export interface RiskAssessment {
-  score: number
-  confidence: number
-  factors: string[]
-  source: string
-  updatedAt: string
-}
+export type Role = ContractSchema<'Role'>
+export type AppMode = ContractSchema<'AppMode'>
+export type Severity = ContractSchema<'Severity'>
+export type FreshnessState = ContractSchema<'FreshnessState'>
+export type ClusterConnectionMode = ContractSchema<'ClusterConnectionMode'>
+export type ClusterHealth = ContractSchema<'ClusterHealth'>
+export type Cluster = ContractSchema<'Cluster'>
+export type ClusterCreateRequest = ContractSchema<'ClusterCreateRequest'>
+export type ClusterUpdateRequest = ContractSchema<'ClusterUpdateRequest'>
+export type AuthIdentity = ContractSchema<'AuthIdentity'>
+export type SwarmInfo = ContractSchema<'SwarmInfo'>
+export type RiskAssessment = ContractSchema<'RiskAssessment'>
 
 // ── Nodes ─────────────────────────────────────────────────────────────────────
 export interface Node {
@@ -199,71 +152,18 @@ export interface SwarmEvent {
 }
 
 // ── Diagnostics ───────────────────────────────────────────────────────────────
-export interface Finding {
-  id: string
-  severity: Severity
-  resource: string
-  scope: string
-  message: string
-  evidence: string[]
-  recommendation: string
-  source: string
-  detectedAt: string
-}
+export type Finding = ContractSchema<'Finding'>
 
 // ── Incidents ─────────────────────────────────────────────────────────────────
-export type IncidentStatus = 'open' | 'investigating' | 'mitigating' | 'resolved'
-
-export interface RunbookStep {
-  id: string
-  title: string
-  description: string
-  status: 'pending' | 'in_progress' | 'done' | 'skipped'
-  completedBy?: string
-  completedAt?: string
-}
-
-export interface TimelineEntry {
-  id: string
-  actor: string
-  action: string
-  note: string
-  timestamp: string
-}
-
-export interface Incident {
-  id: string
-  clusterID?: string
-  title: string
-  description: string
-  severity: Severity
-  status: IncidentStatus
-  createdBy: string
-  createdAt: string
-  updatedAt: string
-  resolvedAt?: string
-  affectedServices: string[]
-  diagnosticRefs: string[]
-  runbookSteps: RunbookStep[]
-  timeline: TimelineEntry[]
-}
+export type IncidentStatus = ContractSchema<'IncidentStatus'>
+export type RunbookStep = ContractSchema<'RunbookStep'>
+export type TimelineEntry = ContractSchema<'TimelineEntry'>
+export type Incident = ContractSchema<'Incident'>
+export type IncidentCreateRequest = ContractSchema<'IncidentCreateRequest'>
+export type IncidentUpdateRequest = ContractSchema<'IncidentUpdateRequest'>
 
 // ── Audit ─────────────────────────────────────────────────────────────────────
-export interface AuditEntry {
-  id: string
-  clusterID?: string
-  actionRunID?: string
-  actor: string
-  role: Role
-  action: string
-  resource: string
-  resourceID: string
-  beforeSpec?: unknown
-  afterSpec?: unknown
-  result: 'success' | 'failed' | 'rejected' | 'pending_approval'
-  reason?: string
-  timestamp: string
-}
+export type AuditEntry = ContractSchema<'AuditEntry'>
 
 // ── API envelopes ─────────────────────────────────────────────────────────────
 export interface ListResponse<T> {
@@ -300,140 +200,20 @@ export interface ServiceRisk {
   actionability: 'immediate' | 'soon' | 'monitor' | string
 }
 
-export interface OpsMetrics {
-  freshness: FreshnessState
-  lastUpdated: string
-  series: OpsMetricPoint[]
-  serviceRisk: ServiceRisk[]
-}
+export type OpsMetrics = ContractSchema<'OpsMetrics'>
 
-export interface InsightHypothesis {
-  title: string
-  why: string
-  confidence: number
-}
-
-export interface InsightAction {
-  title: string
-  description: string
-  endpointHint: string
-  priority: number
-  actionability: 'immediate' | 'soon' | 'monitor' | string
-}
-
-export interface OpsInsights {
-  summary: string
-  risk: RiskAssessment
-  freshness: FreshnessState
-  hypotheses: InsightHypothesis[]
-  actions: InsightAction[]
-  generatedAt: string
-  provider: string
-  sourceStrategy: string
-}
-
-export type ActionStatus = 'success' | 'failed' | 'dry_run' | 'blocked' | 'pending_approval'
-
-export interface ActionOutcome {
-  id?: string
-  clusterID?: string
-  action: string
-  resource: string
-  resourceID: string
-  reason?: string
-  status: ActionStatus
-  mode: string
-  executed: boolean
-  approvalID?: string
-  approvalRequired?: boolean
-  message: string
-  blockedReason?: string
-  impact?: string
-  plan?: string[]
-  auditID?: string
-  timestamp: string
-}
-
-export interface ActionRun {
-  id: string
-  clusterID: string
-  action: string
-  resource: string
-  resourceID: string
-  requestedBy: string
-  requestedRole: Role
-  reason: string
-  status: ActionStatus
-  mode: string
-  executed: boolean
-  approvalRequired: boolean
-  approvalID?: string
-  auditID?: string
-  message?: string
-  blockedReason?: string
-  impact?: string
-  plan?: string[]
-  params?: Record<string, unknown>
-  createdAt: string
-  updatedAt: string
-  completedAt?: string
-}
-
-export type ApprovalStatus = 'pending' | 'approved' | 'rejected'
-
-export interface ApprovalRequest {
-  id: string
-  clusterID: string
-  actionRunID: string
-  action: string
-  resource: string
-  resourceID: string
-  requestedBy: string
-  requestedRole: Role
-  reason: string
-  status: ApprovalStatus
-  resolutionReason?: string
-  resolvedBy?: string
-  createdAt: string
-  resolvedAt?: string
-}
-
-export interface AssistantCitation {
-  id: string
-  kind: string
-  title: string
-  locator: string
-  snippet?: string
-}
-
-export interface AssistantActionProposal {
-  title: string
-  action: string
-  resource?: string
-  resourceID?: string
-  reason: string
-  params?: Record<string, unknown>
-  requiresApproval: boolean
-}
-
-export interface AssistantMessage {
-  id: string
-  sessionID: string
-  role: 'user' | 'assistant' | string
-  content: string
-  citations?: AssistantCitation[]
-  actionProposals?: AssistantActionProposal[]
-  createdAt: string
-}
-
-export interface AssistantSession {
-  id: string
-  clusterID: string
-  incidentID?: string
-  title: string
-  createdBy: string
-  lastSummary?: string
-  createdAt: string
-  updatedAt: string
-  messages?: AssistantMessage[]
-}
+export type InsightHypothesis = ContractSchema<'InsightHypothesis'>
+export type InsightAction = ContractSchema<'InsightAction'>
+export type OpsInsights = ContractSchema<'OpsInsights'>
+export type ActionStatus = ContractSchema<'ActionStatus'>
+export type ActionOutcome = ContractSchema<'ActionOutcome'>
+export type ActionRun = ContractSchema<'ActionRun'>
+export type ActionExecuteRequest = ContractSchema<'ActionExecuteRequest'>
+export type ApprovalStatus = ContractSchema<'ApprovalStatus'>
+export type ApprovalRequest = ContractSchema<'ApprovalRequest'>
+export type AssistantCitation = ContractSchema<'AssistantCitation'>
+export type AssistantActionProposal = ContractSchema<'AssistantActionProposal'>
+export type AssistantMessage = ContractSchema<'AssistantMessage'>
+export type AssistantSession = ContractSchema<'AssistantSession'>
+export type AssistantSessionCreateRequest = ContractSchema<'AssistantSessionCreateRequest'>
+export type AssistantChatRequest = ContractSchema<'AssistantChatRequest'>

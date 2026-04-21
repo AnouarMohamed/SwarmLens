@@ -1,8 +1,12 @@
-﻿# SwarmLens API Reference
+# SwarmLens API Reference
 
 Base path: `/api/v1`
 
-## Response envelopes
+Canonical contract: [docs/openapi.yaml](openapi.yaml)
+
+This document is the human-oriented overview. The OpenAPI file above is the source of truth for the v1.5 control-plane contract and is used to generate frontend types.
+
+## Contract shape
 
 Most JSON responses use one of these envelopes:
 
@@ -14,7 +18,7 @@ Most JSON responses use one of these envelopes:
 { "data": [{ "...": "..." }], "meta": { "total": 1 } }
 ```
 
-Error shape:
+Errors use:
 
 ```json
 { "error": "human readable message", "code": "snake_case_code" }
@@ -22,267 +26,120 @@ Error shape:
 
 ## Authentication
 
-When `AUTH_ENABLED=true`, pass:
+Primary production auth is OIDC session login with an HttpOnly cookie.
 
-```http
-Authorization: Bearer <token>
-```
+Supported modes:
+
+- Session cookie auth for browser flows.
+- Static bearer token auth for dev and break-glass use.
+- Synthetic local admin identity when auth is disabled.
 
 Role model:
 
-- `viewer`: read endpoints and diagnostics
-- `operator`: write-gated operation endpoints
-- `admin`: operator-level access plus policy/governance flows
+- `viewer`: read-only access.
+- `operator`: diagnostics, incidents, restart, bounded scale, and other write-gated ops.
+- `admin`: approvals, cluster management, and rollback-capable flows.
 
-If auth is disabled, API uses an internal synthetic principal for local/demo convenience.
+## Primary routing model
 
-## Observability and runtime
+v1.5 is cluster-scoped. The primary route family is:
 
-| Method | Path                  | Auth | Notes                             |
-| ------ | --------------------- | ---- | --------------------------------- |
-| GET    | `/healthz`            | none | Liveness check                    |
-| GET    | `/readyz`             | none | Readiness and dependency checks   |
-| GET    | `/metrics`            | none | JSON telemetry                    |
-| GET    | `/metrics/prometheus` | none | Prometheus text exposition        |
-| GET    | `/runtime`            | none | mode/auth/write/freshness posture |
-| GET    | `/openapi.yaml`       | none | OpenAPI spec file                 |
-
-## Operational intelligence
-
-| Method | Path            | Auth   | Description                                        |
-| ------ | --------------- | ------ | -------------------------------------------------- |
-| GET    | `/ops/metrics`  | viewer | Timeseries metrics and service risk ranking        |
-| GET    | `/ops/insights` | viewer | Hybrid insight payload with actions and hypotheses |
-
-### `GET /ops/metrics` shape
-
-```json
-{
-  "data": {
-    "freshness": "live",
-    "lastUpdated": "2026-03-19T12:10:00Z",
-    "series": [
-      {
-        "timestamp": "2026-03-19T12:10:00Z",
-        "healthyRatio": 0.98,
-        "managersOnline": 3,
-        "workersOnline": 5,
-        "runningTasks": 124,
-        "failedTasks": 4,
-        "restartCount": 9,
-        "critical": 2,
-        "warning": 3,
-        "riskScore": 0.61
-      }
-    ],
-    "serviceRisk": [
-      {
-        "service": "payments-worker",
-        "score": 0.82,
-        "reasons": ["replica drift 0/2", "3 failed tasks"],
-        "actionability": "immediate"
-      }
-    ]
-  }
-}
+```text
+/api/v1/clusters/{clusterID}/...
 ```
 
-### `GET /ops/insights` shape
+Legacy single-cluster aliases still exist for compatibility, but they are intentionally omitted from the canonical contract.
 
-```json
-{
-  "data": {
-    "summary": "Cluster is degraded with 2 critical findings.",
-    "risk": {
-      "score": 0.68,
-      "confidence": 0.74,
-      "factors": ["replica drift", "manager reachability"],
-      "source": "predictor",
-      "updatedAt": "2026-03-19T12:10:00Z"
-    },
-    "freshness": "stale",
-    "hypotheses": [
-      {
-        "title": "Replica shortfall in payments-worker",
-        "why": "desired replicas: 2; running tasks: 0",
-        "confidence": 0.85
-      }
-    ],
-    "actions": [
-      {
-        "title": "Run diagnostics",
-        "description": "Recompute findings before remediation.",
-        "endpointHint": "/api/v1/diagnostics/run",
-        "priority": 1,
-        "actionability": "immediate"
-      }
-    ],
-    "generatedAt": "2026-03-19T12:10:00Z",
-    "provider": "none",
-    "sourceStrategy": "deterministic"
-  }
-}
-```
+## Core endpoints
 
-## Inventory and control-plane resources
+### Observability
 
-| Method | Path                      | Auth                  |
-| ------ | ------------------------- | --------------------- |
-| GET    | `/swarm`                  | viewer                |
-| GET    | `/nodes`                  | viewer                |
-| GET    | `/nodes/{id}`             | viewer                |
-| POST   | `/nodes/{id}/drain`       | operator + write gate |
-| POST   | `/nodes/{id}/activate`    | operator + write gate |
-| GET    | `/stacks`                 | viewer                |
-| GET    | `/stacks/{name}`          | viewer                |
-| POST   | `/stacks/{name}/deploy`   | operator + write gate |
-| DELETE | `/stacks/{name}`          | operator + write gate |
-| GET    | `/services`               | viewer                |
-| GET    | `/services/{id}`          | viewer                |
-| POST   | `/services/{id}/scale`    | operator + write gate |
-| POST   | `/services/{id}/restart`  | operator + write gate |
-| POST   | `/services/{id}/update`   | operator + write gate |
-| POST   | `/services/{id}/rollback` | operator + write gate |
-| GET    | `/tasks`                  | viewer                |
-| GET    | `/tasks/{id}`             | viewer                |
-| POST   | `/tasks/{id}/restart`     | operator + write gate |
-| GET    | `/networks`               | viewer                |
-| GET    | `/volumes`                | viewer                |
-| GET    | `/secrets`                | viewer                |
-| GET    | `/configs`                | viewer                |
+| Method | Path            | Auth | Notes                    |
+| ------ | --------------- | ---- | ------------------------ |
+| GET    | `/healthz`      | none | Liveness probe           |
+| GET    | `/readyz`       | none | Dependency readiness     |
+| GET    | `/runtime`      | none | Runtime posture          |
+| GET    | `/openapi.yaml` | none | Canonical OpenAPI spec   |
 
-### Query parameters
+### Auth
 
-- `GET /services?stack=<stackName>`
-- `GET /tasks?service=<idOrName>&node=<idOrHost>&state=<state>`
+| Method | Path           | Auth | Notes                    |
+| ------ | -------------- | ---- | ------------------------ |
+| GET    | `/auth/me`     | none | Session or bearer lookup |
+| POST   | `/auth/logout` | none | Ends current session     |
 
-## Events
+### Clusters
 
-| Method | Path             | Auth   | Notes                      |
-| ------ | ---------------- | ------ | -------------------------- |
-| GET    | `/events`        | viewer | `?type=<eventType>` filter |
-| GET    | `/stream/events` | viewer | SSE stream                 |
+| Method | Path                    | Auth  |
+| ------ | ----------------------- | ----- |
+| GET    | `/clusters`             | admin |
+| POST   | `/clusters`             | admin |
+| GET    | `/clusters/{clusterID}` | admin |
+| PUT    | `/clusters/{clusterID}` | admin |
 
-SSE events from `/stream/events`:
+### Cluster posture and intelligence
 
-- `connected`: initial handshake
-- `swarm`: each event payload serialized as `SwarmEvent`
+| Method | Path                                   | Auth   |
+| ------ | -------------------------------------- | ------ |
+| GET    | `/clusters/{clusterID}/swarm`          | viewer |
+| GET    | `/clusters/{clusterID}/diagnostics`    | viewer |
+| GET    | `/clusters/{clusterID}/ops/metrics`    | viewer |
+| GET    | `/clusters/{clusterID}/ops/insights`   | viewer |
+| GET    | `/clusters/{clusterID}/audit`          | viewer |
 
-Note: this endpoint is protected by auth middleware when `AUTH_ENABLED=true`.
+### Incidents
 
-## Diagnostics
+| Method | Path                                           | Auth     |
+| ------ | ---------------------------------------------- | -------- |
+| GET    | `/clusters/{clusterID}/incidents`              | viewer   |
+| POST   | `/clusters/{clusterID}/incidents`              | operator |
+| GET    | `/clusters/{clusterID}/incidents/{id}`         | viewer   |
+| PUT    | `/clusters/{clusterID}/incidents/{id}`         | operator |
+| POST   | `/clusters/{clusterID}/incidents/{id}/resolve` | operator |
 
-| Method | Path                | Auth   |
-| ------ | ------------------- | ------ |
-| GET    | `/diagnostics`      | viewer |
-| POST   | `/diagnostics/run`  | viewer |
-| GET    | `/diagnostics/{id}` | viewer |
+### Actions and approvals
 
-Query parameters:
+| Method | Path                                               | Auth     |
+| ------ | -------------------------------------------------- | -------- |
+| GET    | `/clusters/{clusterID}/actions`                    | viewer   |
+| POST   | `/clusters/{clusterID}/actions/execute`            | operator |
+| GET    | `/clusters/{clusterID}/approvals`                  | admin    |
+| POST   | `/clusters/{clusterID}/approvals/{id}/approve`     | admin    |
+| POST   | `/clusters/{clusterID}/approvals/{id}/reject`      | admin    |
 
-- `GET /diagnostics?severity=critical`
+Notes:
 
-## Incidents
+- Every live action requires a human reason.
+- `service.rollback` and large scale changes enter approval first.
+- Assistant-suggested actions use the same action pipeline.
 
-| Method | Path                      | Auth   |
-| ------ | ------------------------- | ------ |
-| GET    | `/incidents`              | viewer |
-| POST   | `/incidents`              | viewer |
-| GET    | `/incidents/{id}`         | viewer |
-| PUT    | `/incidents/{id}`         | viewer |
-| POST   | `/incidents/{id}/resolve` | viewer |
+### Assistant
 
-Request body for `POST /incidents`:
+| Method | Path                                              | Auth     | Notes                 |
+| ------ | ------------------------------------------------- | -------- | --------------------- |
+| GET    | `/clusters/{clusterID}/assistant/sessions`        | viewer   | Durable session list  |
+| POST   | `/clusters/{clusterID}/assistant/sessions`        | operator | Create session        |
+| GET    | `/clusters/{clusterID}/assistant/sessions/{id}`   | viewer   | Session with messages |
+| POST   | `/clusters/{clusterID}/assistant/chat`            | operator | `text/event-stream`   |
 
-```json
-{
-  "title": "Replica drift in payments-worker",
-  "description": "0/2 replicas",
-  "severity": "high",
-  "affectedServices": ["payments-worker"],
-  "diagnosticRefs": ["finding-id"]
-}
-```
+SSE events currently include:
 
-## Audit
-
-| Method | Path     | Auth   | Notes                             |
-| ------ | -------- | ------ | --------------------------------- |
-| GET    | `/audit` | viewer | `limit` and `offset` query params |
-
-## Action orchestrator
-
-| Method | Path               | Auth                                                                     |
-| ------ | ------------------ | ------------------------------------------------------------------------ |
-| POST   | `/actions/execute` | viewer for read-only actions, operator + write gate for mutating actions |
-
-Request:
-
-```json
-{
-  "action": "diagnostics.run",
-  "resource": "cluster",
-  "resourceID": "main",
-  "params": {}
-}
-```
-
-Action response:
-
-```json
-{
-  "data": {
-    "action": "service.scale",
-    "resource": "service",
-    "resourceID": "payments-worker",
-    "status": "dry_run",
-    "mode": "dry_run",
-    "executed": false,
-    "message": "Validated and generated an execution plan.",
-    "blockedReason": "action_not_implemented",
-    "impact": "No live mutation executed.",
-    "plan": ["step 1", "step 2"],
-    "auditID": "audit_123",
-    "timestamp": "2026-03-19T12:10:00Z"
-  }
-}
-```
-
-Current read-only actions that execute live:
-
-- `diagnostics.run`
-- `telemetry.refresh`
-- `incident.create`
-
-Other actions are policy-validated and currently return dry-run plans (or demo simulation in demo mode).
-
-## Assistant (SSE)
-
-| Method | Path              | Auth   | Transport           |
-| ------ | ----------------- | ------ | ------------------- |
-| POST   | `/assistant/chat` | viewer | `text/event-stream` |
-
-Request body:
-
-```json
-{ "prompt": "What needs action right now?" }
-```
-
-SSE event sequence:
-
+- `session`
 - `context`
 - `insight`
-- `hypothesis` (0..n)
-- `action` (0..n)
+- `hypothesis`
+- `action`
+- `citation`
+- `action_proposal`
 - `message`
 - `done`
 
-## Predictor service (internal)
+## Contract generation workflow
 
-SwarmLens backend calls predictor at `PREDICTOR_BASE_URL/score`.
+Frontend control-plane types are generated from `docs/openapi.yaml`.
 
-- Method: `POST /score`
-- Header: `X-Shared-Secret` when configured
-- Response: `{ score, confidence, factors, source }`
+Regenerate them with:
 
-If predictor is unavailable, backend falls back to deterministic local scoring.
+```bash
+npm run contracts:generate
+```

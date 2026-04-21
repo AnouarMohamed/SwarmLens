@@ -15,13 +15,16 @@ This document lists implemented controls and current limitations.
 
 | Control                      | Status                                 | Notes                                                                       |
 | ---------------------------- | -------------------------------------- | --------------------------------------------------------------------------- |
-| Auth toggle                  | Implemented                            | `AUTH_ENABLED=true` enforces bearer token auth.                             |
+| OIDC and session auth        | Implemented                            | OIDC login with backend-managed session cookies is available.               |
+| Static token auth            | Implemented                            | Supported for dev and break-glass access.                                   |
 | Static role model            | Implemented                            | Roles: `viewer`, `operator`, `admin`.                                       |
 | Write gate                   | Implemented                            | `WRITE_ACTIONS_ENABLED=false` blocks mutating handlers.                     |
 | Action policy modes          | Implemented                            | `read_only_dry_run`, `allowlist_live`, `demo_only`.                         |
-| Audit trail                  | Implemented                            | Action outcomes include `auditID`; audit records are append-only in memory. |
+| Persistent control-plane DB  | Implemented                            | Postgres-backed sessions, incidents, audit, actions, approvals, assistant.  |
+| Approval workflow            | Implemented                            | Risky actions can enter durable admin approval before execution.            |
 | Security headers             | Implemented                            | `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`.             |
 | CORS middleware              | Implemented                            | Reflects request origin with explicit methods/headers allowlist.            |
+| CSRF protection              | Implemented                            | Mutating cookie-authenticated requests require `X-CSRF-Token`.              |
 | Rate limiting                | Implemented                            | Per-client token-bucket style limiter via `RATE_LIMIT_*`.                   |
 | Non-root containers          | Implemented                            | Backend and predictor images run as UID/GID 1001.                           |
 | Docker socket mount mode     | Implemented in compose/stack templates | Mounted read-only (`:ro`).                                                  |
@@ -30,17 +33,18 @@ This document lists implemented controls and current limitations.
 
 ## Current limitations
 
-- Static tokens are currently the active auth mechanism; external OIDC fields are reserved and not fully wired.
-- Audit store is in-memory; without external persistence it resets on restart.
-- High-risk multi-party approval logic is policy-intent only today; no dedicated approval workflow endpoint is enforced yet.
-- Incident create/update endpoints are authenticated but not role-gated beyond authenticated access.
-- Event SSE endpoint uses auth middleware; ensure your deployment/auth strategy supports this path.
-- CORS currently reflects incoming origin; production ingress should constrain reachable origins and networks.
+- Inventory and workload contracts are not fully generated yet; the OpenAPI-driven type flow currently covers the v1.5 control-plane slice first.
+- Event SSE endpoints use auth middleware; production ingress needs to preserve cookies or bearer tokens for these paths.
+- CORS still depends on deployment configuration; production should set strict `CORS_ALLOW_ORIGINS`.
+- Some high-risk actions remain intentionally dry-run only in this milestone, including arbitrary service update, stack deploy/remove, and node drain/activate.
 
 ## Production hardening checklist
 
 - [ ] Set `APP_MODE=prod`
 - [ ] Set `AUTH_ENABLED=true`
+- [ ] Set `AUTH_PROVIDER=oidc`
+- [ ] Set `SESSION_COOKIE_SECURE=true`
+- [ ] Set `CORS_ALLOW_ORIGINS` to exact trusted origins
 - [ ] Use strong secrets via files (`*_FILE`) instead of plain env vars
 - [ ] Keep `WRITE_ACTIONS_ENABLED=false` unless a controlled change window requires writes
 - [ ] Keep `LIVE_ACTION_POLICY=read_only_dry_run` unless explicitly approved
@@ -55,6 +59,8 @@ This document lists implemented controls and current limitations.
 Prefer file-backed secrets:
 
 - `AUTH_TOKENS_FILE`
+- `DATABASE_URL_FILE`
+- `AUTH_OIDC_CLIENT_SECRET_FILE`
 - `PREDICTOR_SHARED_SECRET_FILE`
 - `ASSISTANT_API_KEY_FILE`
 

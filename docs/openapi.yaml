@@ -1,21 +1,22 @@
-﻿openapi: 3.0.3
+openapi: 3.0.3
 info:
-  title: SwarmLens API
-  version: 0.1.0
+  title: SwarmLens Control Plane API
+  version: 1.5.0
   description: |
-    Operational API for SwarmLens.
-    Most JSON responses are wrapped in { data: ... } or { data: [...], meta: { total } }.
+    Canonical v1.5 control-plane contract for SwarmLens.
+    Cluster-scoped endpoints are primary. Legacy single-cluster aliases are intentionally omitted.
 servers:
   - url: /api/v1
 tags:
   - name: Observability
-  - name: Ops
-  - name: Inventory
-  - name: Diagnostics
+  - name: Auth
+  - name: Clusters
+  - name: Operations
   - name: Incidents
   - name: Audit
-  - name: Assistant
   - name: Actions
+  - name: Approvals
+  - name: Assistant
 paths:
   /healthz:
     get:
@@ -31,530 +32,224 @@ paths:
       responses:
         '200':
           description: Ready
-  /metrics:
-    get:
-      tags: [Observability]
-      summary: Runtime JSON metrics
-      responses:
-        '200':
-          description: Runtime metrics
-  /metrics/prometheus:
-    get:
-      tags: [Observability]
-      summary: Prometheus exposition
-      responses:
-        '200':
-          description: Prometheus text payload
   /runtime:
     get:
       tags: [Observability]
       summary: Runtime posture
       responses:
         '200':
-          description: Mode, auth, write gate, freshness state
-  /ops/metrics:
+          description: Runtime payload
+  /openapi.yaml:
     get:
-      tags: [Ops]
-      summary: Timeseries operational metrics
-      security:
-        - bearerAuth: []
+      tags: [Observability]
+      summary: OpenAPI contract
       responses:
         '200':
-          description: Ops metrics payload
-  /ops/insights:
+          description: OpenAPI YAML
+  /auth/me:
     get:
-      tags: [Ops]
-      summary: Hybrid ops insights
-      security:
-        - bearerAuth: []
+      tags: [Auth]
+      summary: Current session identity
       responses:
         '200':
-          description: Insight payload with actions and hypotheses
-  /swarm:
-    get:
-      tags: [Inventory]
-      summary: Cluster posture
-      security:
-        - bearerAuth: []
-      responses:
-        '200':
-          description: SwarmInfo envelope
-  /nodes:
-    get:
-      tags: [Inventory]
-      summary: List nodes
-      security:
-        - bearerAuth: []
-      responses:
-        '200':
-          description: Node list envelope
-  /nodes/{id}:
-    get:
-      tags: [Inventory]
-      summary: Get node
-      security:
-        - bearerAuth: []
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: Node envelope
-        '404':
-          description: Not found
-  /nodes/{id}/drain:
+          description: Current identity
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthIdentityItemResponse'
+  /auth/logout:
     post:
-      tags: [Actions]
-      summary: Drain node
-      security:
-        - bearerAuth: []
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: string
+      tags: [Auth]
+      summary: End current session
       responses:
         '200':
-          description: ActionOutcome envelope
-  /nodes/{id}/activate:
+          description: Logout acknowledgement
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkItemResponse'
+  /clusters:
+    get:
+      tags: [Clusters]
+      summary: List configured clusters
+      responses:
+        '200':
+          description: Cluster list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClusterListResponse'
     post:
-      tags: [Actions]
-      summary: Activate node
-      security:
-        - bearerAuth: []
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: ActionOutcome envelope
-  /stacks:
-    get:
-      tags: [Inventory]
-      summary: List stacks
-      security:
-        - bearerAuth: []
-      responses:
-        '200':
-          description: Stack list envelope
-  /stacks/{name}:
-    get:
-      tags: [Inventory]
-      summary: Get stack
-      security:
-        - bearerAuth: []
-      parameters:
-        - in: path
-          name: name
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: Stack envelope
-    delete:
-      tags: [Actions]
-      summary: Remove stack
-      security:
-        - bearerAuth: []
-      parameters:
-        - in: path
-          name: name
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: ActionOutcome envelope
-  /stacks/{name}/deploy:
-    post:
-      tags: [Actions]
-      summary: Deploy stack
-      security:
-        - bearerAuth: []
-      parameters:
-        - in: path
-          name: name
-          required: true
-          schema:
-            type: string
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: true
-      responses:
-        '200':
-          description: ActionOutcome envelope
-  /services:
-    get:
-      tags: [Inventory]
-      summary: List services
-      security:
-        - bearerAuth: []
-      parameters:
-        - in: query
-          name: stack
-          schema:
-            type: string
-      responses:
-        '200':
-          description: Service list envelope
-  /services/{id}:
-    get:
-      tags: [Inventory]
-      summary: Get service
-      security:
-        - bearerAuth: []
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: Service envelope
-  /services/{id}/scale:
-    post:
-      tags: [Actions]
-      summary: Scale service
-      security:
-        - bearerAuth: []
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: string
+      tags: [Clusters]
+      summary: Create a cluster
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              required: [replicas]
-              properties:
-                replicas:
-                  type: integer
-                  minimum: 0
+              $ref: '#/components/schemas/ClusterCreateRequest'
+      responses:
+        '201':
+          description: Created cluster
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClusterItemResponse'
+  /clusters/{clusterID}:
+    get:
+      tags: [Clusters]
+      summary: Get cluster
+      parameters:
+        - $ref: '#/components/parameters/ClusterID'
       responses:
         '200':
-          description: ActionOutcome envelope
-  /services/{id}/restart:
-    post:
-      tags: [Actions]
-      summary: Restart service
-      security:
-        - bearerAuth: []
+          description: Cluster detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClusterItemResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [Clusters]
+      summary: Update cluster
       parameters:
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: ActionOutcome envelope
-  /services/{id}/update:
-    post:
-      tags: [Actions]
-      summary: Update service spec
-      security:
-        - bearerAuth: []
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/ClusterID'
       requestBody:
-        required: false
+        required: true
         content:
           application/json:
             schema:
-              type: object
-              additionalProperties: true
+              $ref: '#/components/schemas/ClusterUpdateRequest'
       responses:
         '200':
-          description: ActionOutcome envelope
-  /services/{id}/rollback:
-    post:
-      tags: [Actions]
-      summary: Rollback service
-      security:
-        - bearerAuth: []
+          description: Updated cluster
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClusterItemResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /clusters/{clusterID}/swarm:
+    get:
+      tags: [Operations]
+      summary: Get cluster posture
       parameters:
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/ClusterID'
       responses:
         '200':
-          description: ActionOutcome envelope
-  /tasks:
+          description: Swarm posture
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SwarmInfoItemResponse'
+  /clusters/{clusterID}/diagnostics:
     get:
-      tags: [Inventory]
-      summary: List tasks
-      security:
-        - bearerAuth: []
+      tags: [Operations]
+      summary: List diagnostics findings
       parameters:
-        - in: query
-          name: service
-          schema:
-            type: string
-        - in: query
-          name: node
-          schema:
-            type: string
-        - in: query
-          name: state
-          schema:
-            type: string
-      responses:
-        '200':
-          description: Task list envelope
-  /tasks/{id}:
-    get:
-      tags: [Inventory]
-      summary: Get task
-      security:
-        - bearerAuth: []
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: Task envelope
-  /tasks/{id}/restart:
-    post:
-      tags: [Actions]
-      summary: Restart task
-      security:
-        - bearerAuth: []
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: ActionOutcome envelope
-  /networks:
-    get:
-      tags: [Inventory]
-      summary: List networks
-      security:
-        - bearerAuth: []
-      responses:
-        '200':
-          description: Network list envelope
-  /volumes:
-    get:
-      tags: [Inventory]
-      summary: List volumes
-      security:
-        - bearerAuth: []
-      responses:
-        '200':
-          description: Volume list envelope
-  /secrets:
-    get:
-      tags: [Inventory]
-      summary: List secrets metadata
-      security:
-        - bearerAuth: []
-      responses:
-        '200':
-          description: Secret list envelope
-  /configs:
-    get:
-      tags: [Inventory]
-      summary: List config metadata
-      security:
-        - bearerAuth: []
-      responses:
-        '200':
-          description: Config list envelope
-  /events:
-    get:
-      tags: [Inventory]
-      summary: List recent swarm events
-      security:
-        - bearerAuth: []
-      parameters:
-        - in: query
-          name: type
-          schema:
-            type: string
-      responses:
-        '200':
-          description: Event list envelope
-  /stream/events:
-    get:
-      tags: [Inventory]
-      summary: Stream swarm events via SSE
-      security:
-        - bearerAuth: []
-      responses:
-        '200':
-          description: text/event-stream
-  /diagnostics:
-    get:
-      tags: [Diagnostics]
-      summary: List findings
-      security:
-        - bearerAuth: []
-      parameters:
+        - $ref: '#/components/parameters/ClusterID'
         - in: query
           name: severity
           schema:
-            type: string
+            $ref: '#/components/schemas/Severity'
       responses:
         '200':
-          description: Finding list envelope
-  /diagnostics/run:
-    post:
-      tags: [Diagnostics]
-      summary: Trigger diagnostics run
-      security:
-        - bearerAuth: []
-      responses:
-        '200':
-          description: Finding list envelope
-  /diagnostics/{id}:
-    get:
-      tags: [Diagnostics]
-      summary: Get finding by ID
-      security:
-        - bearerAuth: []
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: Finding envelope
-        '404':
-          description: Not found
-  /incidents:
+          description: Diagnostics findings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FindingListResponse'
+  /clusters/{clusterID}/incidents:
     get:
       tags: [Incidents]
       summary: List incidents
-      security:
-        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ClusterID'
       responses:
         '200':
-          description: Incident list envelope
+          description: Incidents
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncidentListResponse'
     post:
       tags: [Incidents]
       summary: Create incident
-      security:
-        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ClusterID'
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              required: [title]
-              properties:
-                title:
-                  type: string
-                description:
-                  type: string
-                severity:
-                  type: string
-                affectedServices:
-                  type: array
-                  items:
-                    type: string
-                diagnosticRefs:
-                  type: array
-                  items:
-                    type: string
+              $ref: '#/components/schemas/IncidentCreateRequest'
       responses:
         '201':
-          description: Incident envelope
-  /incidents/{id}:
+          description: Created incident
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncidentItemResponse'
+  /clusters/{clusterID}/incidents/{id}:
     get:
       tags: [Incidents]
       summary: Get incident
-      security:
-        - bearerAuth: []
       parameters:
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/ClusterID'
+        - $ref: '#/components/parameters/EntityID'
       responses:
         '200':
-          description: Incident envelope
+          description: Incident detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncidentItemResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
     put:
       tags: [Incidents]
-      summary: Update incident status
-      security:
-        - bearerAuth: []
+      summary: Update incident
       parameters:
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/ClusterID'
+        - $ref: '#/components/parameters/EntityID'
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              required: [status]
-              properties:
-                status:
-                  type: string
-                note:
-                  type: string
+              $ref: '#/components/schemas/IncidentUpdateRequest'
       responses:
         '200':
-          description: Incident envelope
-  /incidents/{id}/resolve:
+          description: Updated incident
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncidentItemResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /clusters/{clusterID}/incidents/{id}/resolve:
     post:
       tags: [Incidents]
       summary: Resolve incident
-      security:
-        - bearerAuth: []
       parameters:
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/ClusterID'
+        - $ref: '#/components/parameters/EntityID'
       responses:
         '200':
-          description: Incident envelope
-  /audit:
+          description: Resolved incident
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncidentItemResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /clusters/{clusterID}/audit:
     get:
       tags: [Audit]
       summary: List audit entries
-      security:
-        - bearerAuth: []
       parameters:
+        - $ref: '#/components/parameters/ClusterID'
         - in: query
           name: limit
           schema:
@@ -567,54 +262,1051 @@ paths:
             minimum: 0
       responses:
         '200':
-          description: Audit list envelope
-  /assistant/chat:
-    post:
-      tags: [Assistant]
-      summary: Stream assistant response over SSE
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                prompt:
-                  type: string
+          description: Audit entries
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditEntryListResponse'
+  /clusters/{clusterID}/ops/metrics:
+    get:
+      tags: [Operations]
+      summary: Cluster metrics
+      parameters:
+        - $ref: '#/components/parameters/ClusterID'
       responses:
         '200':
-          description: text/event-stream
-  /actions/execute:
+          description: Operational metrics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OpsMetricsItemResponse'
+  /clusters/{clusterID}/ops/insights:
+    get:
+      tags: [Operations]
+      summary: Cluster insights
+      parameters:
+        - $ref: '#/components/parameters/ClusterID'
+      responses:
+        '200':
+          description: Operational insights
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OpsInsightsItemResponse'
+  /clusters/{clusterID}/actions:
+    get:
+      tags: [Actions]
+      summary: List action runs
+      parameters:
+        - $ref: '#/components/parameters/ClusterID'
+      responses:
+        '200':
+          description: Action runs
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionRunListResponse'
+  /clusters/{clusterID}/actions/execute:
     post:
       tags: [Actions]
-      summary: Execute read-only action or generate mutation plan
-      security:
-        - bearerAuth: []
+      summary: Execute or queue an action
+      parameters:
+        - $ref: '#/components/parameters/ClusterID'
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              required: [action]
-              properties:
-                action:
-                  type: string
-                resource:
-                  type: string
-                resourceID:
-                  type: string
-                params:
-                  type: object
-                  additionalProperties: true
+              $ref: '#/components/schemas/ActionExecuteRequest'
       responses:
         '200':
-          description: ActionOutcome envelope
+          description: Action outcome
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionOutcomeItemResponse'
+  /clusters/{clusterID}/approvals:
+    get:
+      tags: [Approvals]
+      summary: List approval requests
+      parameters:
+        - $ref: '#/components/parameters/ClusterID'
+        - in: query
+          name: status
+          schema:
+            $ref: '#/components/schemas/ApprovalStatus'
+      responses:
+        '200':
+          description: Approval requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovalRequestListResponse'
+  /clusters/{clusterID}/approvals/{id}/approve:
+    post:
+      tags: [Approvals]
+      summary: Approve pending action
+      parameters:
+        - $ref: '#/components/parameters/ClusterID'
+        - $ref: '#/components/parameters/EntityID'
+      responses:
+        '200':
+          description: Approval outcome
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionOutcomeItemResponse'
+  /clusters/{clusterID}/approvals/{id}/reject:
+    post:
+      tags: [Approvals]
+      summary: Reject pending action
+      parameters:
+        - $ref: '#/components/parameters/ClusterID'
+        - $ref: '#/components/parameters/EntityID'
+      responses:
+        '200':
+          description: Rejection outcome
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionOutcomeItemResponse'
+  /clusters/{clusterID}/assistant/sessions:
+    get:
+      tags: [Assistant]
+      summary: List assistant sessions
+      parameters:
+        - $ref: '#/components/parameters/ClusterID'
+      responses:
+        '200':
+          description: Assistant sessions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistantSessionListResponse'
+    post:
+      tags: [Assistant]
+      summary: Create assistant session
+      parameters:
+        - $ref: '#/components/parameters/ClusterID'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssistantSessionCreateRequest'
+      responses:
+        '201':
+          description: Created assistant session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistantSessionItemResponse'
+  /clusters/{clusterID}/assistant/sessions/{id}:
+    get:
+      tags: [Assistant]
+      summary: Get assistant session
+      parameters:
+        - $ref: '#/components/parameters/ClusterID'
+        - $ref: '#/components/parameters/EntityID'
+      responses:
+        '200':
+          description: Assistant session detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistantSessionItemResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /clusters/{clusterID}/assistant/chat:
+    post:
+      tags: [Assistant]
+      summary: Stream assistant response
+      parameters:
+        - $ref: '#/components/parameters/ClusterID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssistantChatRequest'
+      responses:
+        '200':
+          description: Event stream with context, insights, citations, and message payloads
+          content:
+            text/event-stream:
+              schema:
+                type: string
 components:
+  parameters:
+    ClusterID:
+      in: path
+      name: clusterID
+      required: true
+      schema:
+        type: string
+    EntityID:
+      in: path
+      name: id
+      required: true
+      schema:
+        type: string
+  responses:
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
-      bearerFormat: opaque-token
+      bearerFormat: token
+    cookieSession:
+      type: apiKey
+      in: cookie
+      name: swarmlens_session
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [error, code]
+      properties:
+        error:
+          type: string
+        code:
+          type: string
+    ListMeta:
+      type: object
+      required: [total]
+      properties:
+        total:
+          type: integer
+          minimum: 0
+    Role:
+      type: string
+      enum: [viewer, operator, admin]
+    AppMode:
+      type: string
+      enum: [dev, demo, prod]
+    Severity:
+      type: string
+      enum: [critical, high, medium, low, info]
+    FreshnessState:
+      type: string
+      enum: [live, stale, disconnected]
+    ClusterConnectionMode:
+      type: string
+      enum: [direct, demo]
+    IncidentStatus:
+      type: string
+      enum: [open, investigating, mitigating, resolved]
+    ActionStatus:
+      type: string
+      enum: [success, failed, dry_run, blocked, pending_approval]
+    ApprovalStatus:
+      type: string
+      enum: [pending, approved, rejected]
+    AuditResult:
+      type: string
+      enum: [success, failed, rejected, pending_approval]
+    RiskAssessment:
+      type: object
+      required: [score, confidence, factors, source, updatedAt]
+      properties:
+        score:
+          type: number
+        confidence:
+          type: number
+        factors:
+          type: array
+          items:
+            type: string
+        source:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
+    ClusterHealth:
+      type: object
+      required: [freshness, managers, workers, reachable]
+      properties:
+        freshness:
+          $ref: '#/components/schemas/FreshnessState'
+        lastSyncAt:
+          type: string
+          format: date-time
+        lastSyncError:
+          type: string
+        managers:
+          type: integer
+        workers:
+          type: integer
+        reachable:
+          type: boolean
+    Cluster:
+      type: object
+      required: [id, name, dockerHost, connectionMode, tlsEnabled, certRef, enabled, default, createdAt, updatedAt, health]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        dockerHost:
+          type: string
+        connectionMode:
+          $ref: '#/components/schemas/ClusterConnectionMode'
+        tlsEnabled:
+          type: boolean
+        certRef:
+          type: string
+        enabled:
+          type: boolean
+        default:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        health:
+          $ref: '#/components/schemas/ClusterHealth'
+    ClusterCreateRequest:
+      type: object
+      required: [name, dockerHost]
+      properties:
+        name:
+          type: string
+        dockerHost:
+          type: string
+        connectionMode:
+          $ref: '#/components/schemas/ClusterConnectionMode'
+        tlsEnabled:
+          type: boolean
+        certRef:
+          type: string
+        enabled:
+          type: boolean
+        default:
+          type: boolean
+    ClusterUpdateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        dockerHost:
+          type: string
+        connectionMode:
+          $ref: '#/components/schemas/ClusterConnectionMode'
+        tlsEnabled:
+          type: boolean
+        certRef:
+          type: string
+        enabled:
+          type: boolean
+        default:
+          type: boolean
+    AuthIdentity:
+      type: object
+      required: [authenticated]
+      properties:
+        authenticated:
+          type: boolean
+        username:
+          type: string
+        role:
+          $ref: '#/components/schemas/Role'
+        provider:
+          type: string
+        groups:
+          type: array
+          items:
+            type: string
+        csrfToken:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+    SwarmInfo:
+      type: object
+      required: [clusterID, createdAt, updatedAt, managers, workers, quorumHealthy, raftState, mode, writeEnabled, freshness, lastSyncAt, risk]
+      properties:
+        clusterID:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        managers:
+          type: integer
+        workers:
+          type: integer
+        quorumHealthy:
+          type: boolean
+        raftState:
+          type: string
+          enum: [healthy, degraded, single, unknown]
+        mode:
+          $ref: '#/components/schemas/AppMode'
+        writeEnabled:
+          type: boolean
+        freshness:
+          $ref: '#/components/schemas/FreshnessState'
+        lastSyncAt:
+          type: string
+          format: date-time
+        syncError:
+          type: string
+        risk:
+          $ref: '#/components/schemas/RiskAssessment'
+    Finding:
+      type: object
+      required: [id, severity, resource, scope, message, evidence, recommendation, source, detectedAt]
+      properties:
+        id:
+          type: string
+        severity:
+          $ref: '#/components/schemas/Severity'
+        resource:
+          type: string
+        scope:
+          type: string
+        message:
+          type: string
+        evidence:
+          type: array
+          items:
+            type: string
+        recommendation:
+          type: string
+        source:
+          type: string
+        detectedAt:
+          type: string
+          format: date-time
+    RunbookStep:
+      type: object
+      required: [id, title, description, status]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        status:
+          type: string
+          enum: [pending, in_progress, done, skipped]
+        completedBy:
+          type: string
+        completedAt:
+          type: string
+          format: date-time
+    TimelineEntry:
+      type: object
+      required: [id, actor, action, note, timestamp]
+      properties:
+        id:
+          type: string
+        actor:
+          type: string
+        action:
+          type: string
+        note:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+    Incident:
+      type: object
+      required: [id, title, description, severity, status, createdBy, createdAt, updatedAt, affectedServices, diagnosticRefs, runbookSteps, timeline]
+      properties:
+        id:
+          type: string
+        clusterID:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        severity:
+          $ref: '#/components/schemas/Severity'
+        status:
+          $ref: '#/components/schemas/IncidentStatus'
+        createdBy:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        resolvedAt:
+          type: string
+          format: date-time
+        affectedServices:
+          type: array
+          items:
+            type: string
+        diagnosticRefs:
+          type: array
+          items:
+            type: string
+        runbookSteps:
+          type: array
+          items:
+            $ref: '#/components/schemas/RunbookStep'
+        timeline:
+          type: array
+          items:
+            $ref: '#/components/schemas/TimelineEntry'
+    IncidentCreateRequest:
+      type: object
+      required: [title, description, severity]
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        severity:
+          $ref: '#/components/schemas/Severity'
+        affectedServices:
+          type: array
+          items:
+            type: string
+        diagnosticRefs:
+          type: array
+          items:
+            type: string
+    IncidentUpdateRequest:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        severity:
+          $ref: '#/components/schemas/Severity'
+        status:
+          $ref: '#/components/schemas/IncidentStatus'
+        affectedServices:
+          type: array
+          items:
+            type: string
+        diagnosticRefs:
+          type: array
+          items:
+            type: string
+    AuditEntry:
+      type: object
+      required: [id, actor, role, action, resource, resourceID, result, timestamp]
+      properties:
+        id:
+          type: string
+        clusterID:
+          type: string
+        actionRunID:
+          type: string
+        actor:
+          type: string
+        role:
+          $ref: '#/components/schemas/Role'
+        action:
+          type: string
+        resource:
+          type: string
+        resourceID:
+          type: string
+        beforeSpec:
+          type: object
+          additionalProperties: true
+        afterSpec:
+          type: object
+          additionalProperties: true
+        result:
+          $ref: '#/components/schemas/AuditResult'
+        reason:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+    ActionOutcome:
+      type: object
+      required: [action, resource, resourceID, status, mode, executed, message, timestamp]
+      properties:
+        id:
+          type: string
+        clusterID:
+          type: string
+        action:
+          type: string
+        resource:
+          type: string
+        resourceID:
+          type: string
+        reason:
+          type: string
+        status:
+          $ref: '#/components/schemas/ActionStatus'
+        mode:
+          type: string
+        executed:
+          type: boolean
+        approvalID:
+          type: string
+        approvalRequired:
+          type: boolean
+        message:
+          type: string
+        blockedReason:
+          type: string
+        impact:
+          type: string
+        plan:
+          type: array
+          items:
+            type: string
+        auditID:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+    ActionRun:
+      type: object
+      required: [id, clusterID, action, resource, resourceID, requestedBy, requestedRole, reason, status, mode, executed, approvalRequired, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        clusterID:
+          type: string
+        action:
+          type: string
+        resource:
+          type: string
+        resourceID:
+          type: string
+        requestedBy:
+          type: string
+        requestedRole:
+          $ref: '#/components/schemas/Role'
+        reason:
+          type: string
+        status:
+          $ref: '#/components/schemas/ActionStatus'
+        mode:
+          type: string
+        executed:
+          type: boolean
+        approvalRequired:
+          type: boolean
+        approvalID:
+          type: string
+        auditID:
+          type: string
+        message:
+          type: string
+        blockedReason:
+          type: string
+        impact:
+          type: string
+        plan:
+          type: array
+          items:
+            type: string
+        params:
+          type: object
+          additionalProperties: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+    ApprovalRequest:
+      type: object
+      required: [id, clusterID, actionRunID, action, resource, resourceID, requestedBy, requestedRole, reason, status, createdAt]
+      properties:
+        id:
+          type: string
+        clusterID:
+          type: string
+        actionRunID:
+          type: string
+        action:
+          type: string
+        resource:
+          type: string
+        resourceID:
+          type: string
+        requestedBy:
+          type: string
+        requestedRole:
+          $ref: '#/components/schemas/Role'
+        reason:
+          type: string
+        status:
+          $ref: '#/components/schemas/ApprovalStatus'
+        resolutionReason:
+          type: string
+        resolvedBy:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        resolvedAt:
+          type: string
+          format: date-time
+    AssistantCitation:
+      type: object
+      required: [id, kind, title, locator]
+      properties:
+        id:
+          type: string
+        kind:
+          type: string
+        title:
+          type: string
+        locator:
+          type: string
+        snippet:
+          type: string
+    AssistantActionProposal:
+      type: object
+      required: [title, action, reason, requiresApproval]
+      properties:
+        title:
+          type: string
+        action:
+          type: string
+        resource:
+          type: string
+        resourceID:
+          type: string
+        reason:
+          type: string
+        params:
+          type: object
+          additionalProperties: true
+        requiresApproval:
+          type: boolean
+    AssistantMessage:
+      type: object
+      required: [id, sessionID, role, content, createdAt]
+      properties:
+        id:
+          type: string
+        sessionID:
+          type: string
+        role:
+          type: string
+        content:
+          type: string
+        citations:
+          type: array
+          items:
+            $ref: '#/components/schemas/AssistantCitation'
+        actionProposals:
+          type: array
+          items:
+            $ref: '#/components/schemas/AssistantActionProposal'
+        createdAt:
+          type: string
+          format: date-time
+    AssistantSession:
+      type: object
+      required: [id, clusterID, title, createdBy, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        clusterID:
+          type: string
+        incidentID:
+          type: string
+        title:
+          type: string
+        createdBy:
+          type: string
+        lastSummary:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/AssistantMessage'
+    AssistantSessionCreateRequest:
+      type: object
+      properties:
+        title:
+          type: string
+        incidentID:
+          type: string
+    AssistantChatRequest:
+      type: object
+      required: [prompt]
+      properties:
+        prompt:
+          type: string
+        sessionID:
+          type: string
+        incidentID:
+          type: string
+    ActionExecuteRequest:
+      type: object
+      required: [action, reason]
+      properties:
+        action:
+          type: string
+        resource:
+          type: string
+        resourceID:
+          type: string
+        reason:
+          type: string
+        params:
+          type: object
+          additionalProperties: true
+    OpsMetricPoint:
+      type: object
+      required: [timestamp, healthyRatio, managersOnline, workersOnline, runningTasks, failedTasks, restartCount, critical, warning, riskScore]
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        healthyRatio:
+          type: number
+        managersOnline:
+          type: integer
+        workersOnline:
+          type: integer
+        runningTasks:
+          type: integer
+        failedTasks:
+          type: integer
+        restartCount:
+          type: integer
+        critical:
+          type: integer
+        warning:
+          type: integer
+        riskScore:
+          type: number
+    ServiceRisk:
+      type: object
+      required: [service, score, reasons, actionability]
+      properties:
+        service:
+          type: string
+        score:
+          type: number
+        reasons:
+          type: array
+          items:
+            type: string
+        actionability:
+          type: string
+    OpsMetrics:
+      type: object
+      required: [freshness, lastUpdated, series, serviceRisk]
+      properties:
+        freshness:
+          $ref: '#/components/schemas/FreshnessState'
+        lastUpdated:
+          type: string
+          format: date-time
+        series:
+          type: array
+          items:
+            $ref: '#/components/schemas/OpsMetricPoint'
+        serviceRisk:
+          type: array
+          items:
+            $ref: '#/components/schemas/ServiceRisk'
+    InsightHypothesis:
+      type: object
+      required: [title, why, confidence]
+      properties:
+        title:
+          type: string
+        why:
+          type: string
+        confidence:
+          type: number
+    InsightAction:
+      type: object
+      required: [title, description, endpointHint, priority, actionability]
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        endpointHint:
+          type: string
+        priority:
+          type: integer
+        actionability:
+          type: string
+    OpsInsights:
+      type: object
+      required: [summary, risk, freshness, hypotheses, actions, generatedAt, provider, sourceStrategy]
+      properties:
+        summary:
+          type: string
+        risk:
+          $ref: '#/components/schemas/RiskAssessment'
+        freshness:
+          $ref: '#/components/schemas/FreshnessState'
+        hypotheses:
+          type: array
+          items:
+            $ref: '#/components/schemas/InsightHypothesis'
+        actions:
+          type: array
+          items:
+            $ref: '#/components/schemas/InsightAction'
+        generatedAt:
+          type: string
+          format: date-time
+        provider:
+          type: string
+        sourceStrategy:
+          type: string
+    OkResult:
+      type: object
+      required: [ok]
+      properties:
+        ok:
+          type: boolean
+    AuthIdentityItemResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/AuthIdentity'
+    ClusterItemResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/Cluster'
+    ClusterListResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Cluster'
+        meta:
+          $ref: '#/components/schemas/ListMeta'
+    SwarmInfoItemResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/SwarmInfo'
+    FindingListResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Finding'
+        meta:
+          $ref: '#/components/schemas/ListMeta'
+    IncidentItemResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/Incident'
+    IncidentListResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Incident'
+        meta:
+          $ref: '#/components/schemas/ListMeta'
+    AuditEntryListResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuditEntry'
+        meta:
+          $ref: '#/components/schemas/ListMeta'
+    OpsMetricsItemResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/OpsMetrics'
+    OpsInsightsItemResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/OpsInsights'
+    ActionOutcomeItemResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/ActionOutcome'
+    ActionRunListResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/ActionRun'
+        meta:
+          $ref: '#/components/schemas/ListMeta'
+    ApprovalRequestListResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/ApprovalRequest'
+        meta:
+          $ref: '#/components/schemas/ListMeta'
+    AssistantSessionItemResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/AssistantSession'
+    AssistantSessionListResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/AssistantSession'
+        meta:
+          $ref: '#/components/schemas/ListMeta'
+    OkItemResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/OkResult'

@@ -1110,7 +1110,7 @@ export function OverviewView() {
   }
 
   function triggerInsightAction(endpointHint: string) {
-    if (endpointHint.includes('/diagnostics/run')) {
+    if (endpointHint.includes('diagnostics.run')) {
       void runDiagnosticsAction()
       return
     }
