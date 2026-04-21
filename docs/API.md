@@ -128,6 +128,8 @@ Useful query parameters:
 | ------ | -------------------------------------------------- | -------- |
 | POST   | `/clusters/{clusterID}/nodes/{id}/drain`           | operator |
 | POST   | `/clusters/{clusterID}/nodes/{id}/activate`        | operator |
+| POST   | `/clusters/{clusterID}/stacks/{name}/deploy`       | operator |
+| DELETE | `/clusters/{clusterID}/stacks/{name}`              | operator |
 | POST   | `/clusters/{clusterID}/services/{id}/scale`        | operator |
 | POST   | `/clusters/{clusterID}/services/{id}/restart`      | operator |
 | POST   | `/clusters/{clusterID}/services/{id}/update`       | operator |
@@ -142,6 +144,7 @@ Useful query parameters:
 Notes:
 
 - Every live action requires a human reason.
+- `stack.deploy` and `stack.remove` are contract-covered but still dry-run only in this milestone.
 - `service.rollback` and large scale changes enter approval first.
 - Assistant-suggested actions use the same action pipeline.
 
@@ -176,6 +179,7 @@ The generated contract now covers:
 - cluster management
 - cluster posture
 - inventory and workload read models
+- typed stack mutation request bodies
 - typed node, service, and task action request bodies
 - diagnostics, incidents, audit
 - actions, approvals, assistant sessions

@@ -250,6 +250,59 @@ paths:
                 $ref: '#/components/schemas/StackItemResponse'
         '404':
           $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Actions]
+      summary: Remove stack
+      description: Dry-run only in the current milestone.
+      parameters:
+        - $ref: '#/components/parameters/ClusterID'
+        - in: path
+          name: name
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ActionReasonRequest'
+      responses:
+        '200':
+          description: Stack remove outcome
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionOutcomeItemResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /clusters/{clusterID}/stacks/{name}/deploy:
+    post:
+      tags: [Actions]
+      summary: Deploy stack
+      description: Dry-run only in the current milestone.
+      parameters:
+        - $ref: '#/components/parameters/ClusterID'
+        - in: path
+          name: name
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StackDeployRequest'
+      responses:
+        '200':
+          description: Stack deploy outcome
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionOutcomeItemResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /clusters/{clusterID}/services:
     get:
       tags: [Inventory]
@@ -1734,6 +1787,13 @@ components:
       properties:
         reason:
           type: string
+    StackDeployRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          type: string
+      additionalProperties: true
     ServiceScaleRequest:
       type: object
       required: [replicas, reason]

@@ -67,21 +67,6 @@ export type IncidentUpdateRequest = ContractSchema<'IncidentUpdateRequest'>
 // ── Audit ─────────────────────────────────────────────────────────────────────
 export type AuditEntry = ContractSchema<'AuditEntry'>
 
-// ── API envelopes ─────────────────────────────────────────────────────────────
-export interface ListResponse<T> {
-  data: T[]
-  meta: { total: number }
-}
-
-export interface ItemResponse<T> {
-  data: T
-}
-
-export interface APIError {
-  error: string
-  code: string
-}
-
 export type OpsMetricPoint = ContractSchema<'OpsMetricPoint'>
 export type ServiceRisk = ContractSchema<'ServiceRisk'>
 export type OpsMetrics = ContractSchema<'OpsMetrics'>
@@ -94,6 +79,7 @@ export type ActionOutcome = ContractSchema<'ActionOutcome'>
 export type ActionRun = ContractSchema<'ActionRun'>
 export type ActionReasonRequest = ContractSchema<'ActionReasonRequest'>
 export type ActionExecuteRequest = ContractSchema<'ActionExecuteRequest'>
+export type StackDeployRequest = ContractSchema<'StackDeployRequest'>
 export type ServiceScaleRequest = ContractSchema<'ServiceScaleRequest'>
 export type ServiceUpdateRequest = ContractSchema<'ServiceUpdateRequest'>
 export type ApprovalStatus = ContractSchema<'ApprovalStatus'>

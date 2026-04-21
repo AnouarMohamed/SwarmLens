@@ -614,6 +614,84 @@ export interface paths {
         };
         put?: never;
         post?: never;
+        /**
+         * Remove stack
+         * @description Dry-run only in the current milestone.
+         */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    clusterID: components["parameters"]["ClusterID"];
+                    name: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["ActionReasonRequest"];
+                };
+            };
+            responses: {
+                /** @description Stack remove outcome */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ActionOutcomeItemResponse"];
+                    };
+                };
+                404: components["responses"]["NotFound"];
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/clusters/{clusterID}/stacks/{name}/deploy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Deploy stack
+         * @description Dry-run only in the current milestone.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    clusterID: components["parameters"]["ClusterID"];
+                    name: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["StackDeployRequest"];
+                };
+            };
+            responses: {
+                /** @description Stack deploy outcome */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ActionOutcomeItemResponse"];
+                    };
+                };
+                404: components["responses"]["NotFound"];
+            };
+        };
         delete?: never;
         options?: never;
         head?: never;
@@ -2401,6 +2479,11 @@ export interface components {
         };
         ActionReasonRequest: {
             reason: string;
+        };
+        StackDeployRequest: {
+            reason: string;
+        } & {
+            [key: string]: unknown;
         };
         ServiceScaleRequest: {
             replicas: number;

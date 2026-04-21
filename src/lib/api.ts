@@ -9,6 +9,7 @@ import type {
   ClusterUpdateRequest,
   IncidentCreateRequest,
   IncidentUpdateRequest,
+  StackDeployRequest,
   ServiceScaleRequest,
   ServiceUpdateRequest,
 } from '../types'
@@ -134,8 +135,8 @@ function put<T>(path: string, body: unknown) {
   return request<T>('PUT', path, body)
 }
 
-function del<T>(path: string) {
-  return request<T>('DELETE', path)
+function del<T>(path: string, body?: unknown) {
+  return request<T>('DELETE', path, body)
 }
 
 function getContract<Path extends ContractPath>(path: string) {
@@ -151,6 +152,13 @@ function postContract<Path extends ContractPath, Status extends number = 200>(
 
 function putContract<Path extends ContractPath>(path: string, body: JsonRequestBody<Path, 'put'>) {
   return put<JsonResponse<Path, 'put', 200>>(path, body)
+}
+
+function deleteContract<Path extends ContractPath, Status extends number = 200>(
+  path: string,
+  body?: JsonRequestBody<Path, 'delete'>,
+) {
+  return del<JsonResponse<Path, 'delete', Status>>(path, body)
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -174,6 +182,16 @@ function routeKnownAction(payload: ActionExecuteRequest): Promise<ActionOutcomeD
     case 'node.activate':
       return postContract<'/clusters/{clusterID}/nodes/{id}/activate'>(
         clusterPath(`/nodes/${payload.resourceID}/activate`),
+        { reason: payload.reason },
+      ).then((r) => r.data)
+    case 'stack.deploy':
+      return postContract<'/clusters/{clusterID}/stacks/{name}/deploy'>(
+        clusterPath(`/stacks/${payload.resourceID}/deploy`),
+        { ...(isRecord(payload.params) ? payload.params : {}), reason: payload.reason } as StackDeployRequest,
+      ).then((r) => r.data)
+    case 'stack.remove':
+      return deleteContract<'/clusters/{clusterID}/stacks/{name}'>(
+        clusterPath(`/stacks/${payload.resourceID}`),
         { reason: payload.reason },
       ).then((r) => r.data)
     case 'service.restart':
@@ -246,8 +264,16 @@ export const api = {
     list: () => getContract<'/clusters/{clusterID}/stacks'>(clusterPath('/stacks')).then((r) => r.data),
     get: (name: string) =>
       getContract<'/clusters/{clusterID}/stacks/{name}'>(clusterPath(`/stacks/${name}`)).then((r) => r.data),
-    deploy: (name: string, body: unknown) => post(clusterPath(`/stacks/${name}/deploy`), body),
-    remove: (name: string) => del(clusterPath(`/stacks/${name}`)),
+    deploy: (name: string, body: StackDeployRequest) =>
+      postContract<'/clusters/{clusterID}/stacks/{name}/deploy'>(
+        clusterPath(`/stacks/${name}/deploy`),
+        body,
+      ).then((r) => r.data),
+    remove: (name: string, body: ActionReasonRequest) =>
+      deleteContract<'/clusters/{clusterID}/stacks/{name}'>(
+        clusterPath(`/stacks/${name}`),
+        body,
+      ).then((r) => r.data),
   },
   services: {
     list: (stack?: ServiceListQuery extends { stack?: infer Value } ? Value : never) =>
