@@ -1,7 +1,7 @@
 import { useState } from 'react'
+import { api } from '../../lib/api'
 import { useClusterStore } from '../../store/clusterStore'
 import { useControlPlaneStore } from '../../store/controlPlaneStore'
-import { useOpsStore } from '../../store/opsStore'
 import { useSessionStore } from '../../store/sessionStore'
 import { ResourceTable, type Column } from '../../components/ui/ResourceTable'
 import { StatusBadge } from '../../components/ui/Badge'
@@ -15,7 +15,6 @@ function cn(...parts: Array<string | false | undefined>) {
 export function NodesView() {
   const { nodes, loading, fetchNodes } = useClusterStore()
   const refreshWorkflow = useControlPlaneStore((s) => s.refreshWorkflow)
-  const runAction = useOpsStore((s) => s.runAction)
   const me = useSessionStore((s) => s.me)
   const [busyKey, setBusyKey] = useState('')
   const [notice, setNotice] = useState('')
@@ -28,12 +27,10 @@ export function NodesView() {
     const key = `${action}:${node.id}`
     setBusyKey(key)
     try {
-      const outcome = await runAction({
-        action,
-        resource: 'node',
-        resourceID: node.id,
-        reason,
-      })
+      const outcome =
+        action === 'node.drain'
+          ? await api.nodes.drain(node.id, { reason })
+          : await api.nodes.activate(node.id, { reason })
       setNotice(outcome ? `${node.hostname}: ${outcome.status} · ${outcome.message}` : `${node.hostname}: action failed`)
       await Promise.all([fetchNodes(), refreshWorkflow()])
     } finally {

@@ -126,6 +126,13 @@ Useful query parameters:
 
 | Method | Path                                               | Auth     |
 | ------ | -------------------------------------------------- | -------- |
+| POST   | `/clusters/{clusterID}/nodes/{id}/drain`           | operator |
+| POST   | `/clusters/{clusterID}/nodes/{id}/activate`        | operator |
+| POST   | `/clusters/{clusterID}/services/{id}/scale`        | operator |
+| POST   | `/clusters/{clusterID}/services/{id}/restart`      | operator |
+| POST   | `/clusters/{clusterID}/services/{id}/update`       | operator |
+| POST   | `/clusters/{clusterID}/services/{id}/rollback`     | operator |
+| POST   | `/clusters/{clusterID}/tasks/{id}/restart`         | operator |
 | GET    | `/clusters/{clusterID}/actions`                    | viewer   |
 | POST   | `/clusters/{clusterID}/actions/execute`            | operator |
 | GET    | `/clusters/{clusterID}/approvals`                  | admin    |
@@ -169,6 +176,7 @@ The generated contract now covers:
 - cluster management
 - cluster posture
 - inventory and workload read models
+- typed node, service, and task action request bodies
 - diagnostics, incidents, audit
 - actions, approvals, assistant sessions
 

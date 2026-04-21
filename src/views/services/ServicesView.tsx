@@ -1,7 +1,7 @@
 import { useState } from 'react'
+import { api } from '../../lib/api'
 import { useClusterStore } from '../../store/clusterStore'
 import { useControlPlaneStore } from '../../store/controlPlaneStore'
-import { useOpsStore } from '../../store/opsStore'
 import { useSessionStore } from '../../store/sessionStore'
 import { ResourceTable, type Column } from '../../components/ui/ResourceTable'
 import { StatusBadge } from '../../components/ui/Badge'
@@ -14,7 +14,6 @@ function cn(...parts: Array<string | false | undefined>) {
 export function ServicesView() {
   const { services, loading, fetchServices } = useClusterStore()
   const refreshWorkflow = useControlPlaneStore((s) => s.refreshWorkflow)
-  const runAction = useOpsStore((s) => s.runAction)
   const me = useSessionStore((s) => s.me)
   const [stackFilter, setStackFilter] = useState('')
   const [busyKey, setBusyKey] = useState('')
@@ -36,13 +35,15 @@ export function ServicesView() {
     const key = `${action}:${service.id}`
     setBusyKey(key)
     try {
-      const outcome = await runAction({
-        action,
-        resource: 'service',
-        resourceID: service.id,
-        reason,
-        params,
-      })
+      const outcome =
+        action === 'service.restart'
+          ? await api.services.restart(service.id, { reason })
+          : action === 'service.scale'
+            ? await api.services.scale(service.id, {
+                replicas: Number(params?.replicas ?? service.desiredReplicas),
+                reason,
+              })
+            : await api.services.rollback(service.id, { reason })
       setNotice(outcome ? `${service.name}: ${outcome.status} · ${outcome.message}` : `${service.name}: action failed`)
       await Promise.all([fetchServices(), refreshWorkflow()])
     } finally {

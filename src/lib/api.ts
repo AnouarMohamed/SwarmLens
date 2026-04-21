@@ -1,38 +1,61 @@
+import type { paths } from '../types/controlplane.generated'
 import type {
-  SwarmInfo,
-  Node,
-  Stack,
-  Service,
-  Task,
-  Network,
-  Volume,
-  Secret,
-  Config,
-  SwarmEvent,
-  Finding,
-  Incident,
-  AuditEntry,
-  OpsMetrics,
-  OpsInsights,
-  ActionOutcome,
-  ListResponse,
-  ItemResponse,
-  Cluster,
+  ActionExecuteRequest,
+  ActionReasonRequest,
+  ApprovalStatus,
+  AssistantChatRequest,
+  AssistantSessionCreateRequest,
   ClusterCreateRequest,
   ClusterUpdateRequest,
-  AuthIdentity,
-  ActionRun,
-  ActionExecuteRequest,
-  ApprovalStatus,
-  ApprovalRequest,
   IncidentCreateRequest,
   IncidentUpdateRequest,
-  AssistantSession,
-  AssistantSessionCreateRequest,
-  AssistantChatRequest,
+  ServiceScaleRequest,
+  ServiceUpdateRequest,
 } from '../types'
 
 const BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? '/api/v1'
+
+type ContractPath = keyof paths
+type HttpMethod = 'get' | 'post' | 'put' | 'delete'
+
+type Operation<Path extends ContractPath, Method extends HttpMethod> = NonNullable<paths[Path][Method]>
+
+type JsonRequestBody<Path extends ContractPath, Method extends HttpMethod> =
+  Operation<Path, Method> extends {
+    requestBody?: {
+      content: {
+        'application/json': infer Body
+      }
+    }
+  }
+    ? Body
+    : never
+
+type JsonResponse<
+  Path extends ContractPath,
+  Method extends HttpMethod,
+  Status extends number,
+> = Operation<Path, Method> extends { responses: infer Responses }
+  ? Status extends keyof Responses
+    ? Responses[Status] extends {
+        content: {
+          'application/json': infer Body
+        }
+      }
+      ? Body
+      : never
+    : never
+  : never
+
+type QueryParams<Path extends ContractPath, Method extends HttpMethod> =
+  Operation<Path, Method> extends { parameters: { query?: infer Query } } ? Query : never
+
+type ServiceListQuery = QueryParams<'/clusters/{clusterID}/services', 'get'>
+type TaskListQuery = QueryParams<'/clusters/{clusterID}/tasks', 'get'>
+type EventListQuery = QueryParams<'/clusters/{clusterID}/events', 'get'>
+type DiagnosticsListQuery = QueryParams<'/clusters/{clusterID}/diagnostics', 'get'>
+type AuditListQuery = QueryParams<'/clusters/{clusterID}/audit', 'get'>
+type ApprovalListQuery = QueryParams<'/clusters/{clusterID}/approvals', 'get'>
 
 class APIError extends Error {
   constructor(public status: number, public code: string, message: string) {
@@ -57,6 +80,20 @@ function clusterPath(path: string) {
   const clusterID = selectedClusterID()
   if (!clusterID) return path
   return `/clusters/${encodeURIComponent(clusterID)}${path}`
+}
+
+function withQuery(
+  path: string,
+  query?: Record<string, string | number | boolean | null | undefined>,
+) {
+  if (!query) return path
+  const search = new URLSearchParams()
+  for (const [key, value] of Object.entries(query)) {
+    if (value === undefined || value === null || value === '') continue
+    search.set(key, String(value))
+  }
+  const encoded = search.toString()
+  return encoded ? `${path}?${encoded}` : path
 }
 
 function headersForRequest(method: 'GET' | 'POST' | 'PUT' | 'DELETE', json = false) {
@@ -100,6 +137,21 @@ function del<T>(path: string) {
   return request<T>('DELETE', path)
 }
 
+function getContract<Path extends ContractPath>(path: string) {
+  return get<JsonResponse<Path, 'get', 200>>(path)
+}
+
+function postContract<Path extends ContractPath, Status extends number = 200>(
+  path: string,
+  body?: JsonRequestBody<Path, 'post'>,
+) {
+  return post<JsonResponse<Path, 'post', Status>>(path, body)
+}
+
+function putContract<Path extends ContractPath>(path: string, body: JsonRequestBody<Path, 'put'>) {
+  return put<JsonResponse<Path, 'put', 200>>(path, body)
+}
+
 function sse(path: string): EventSource {
   const token = readToken()
   const url = token ? `${BASE}${path}?token=${encodeURIComponent(token)}` : `${BASE}${path}`
@@ -108,107 +160,127 @@ function sse(path: string): EventSource {
 
 export const api = {
   auth: {
-    me: () => get<ItemResponse<AuthIdentity>>('/auth/me').then((r) => r.data),
+    me: () => getContract<'/auth/me'>('/auth/me').then((r) => r.data),
     loginUrl: (returnTo = window.location.pathname + window.location.search) =>
       `${BASE}/auth/login?returnTo=${encodeURIComponent(returnTo)}`,
-    logout: () => post<ItemResponse<{ ok: boolean }>>('/auth/logout').then((r) => r.data),
+    logout: () => postContract<'/auth/logout'>('/auth/logout').then((r) => r.data),
   },
   clusters: {
-    list: () => get<ListResponse<Cluster>>('/clusters').then((r) => r.data),
-    get: (id: string) => get<ItemResponse<Cluster>>(`/clusters/${id}`).then((r) => r.data),
-    create: (body: ClusterCreateRequest) => post<ItemResponse<Cluster>>('/clusters', body).then((r) => r.data),
+    list: () => getContract<'/clusters'>('/clusters').then((r) => r.data),
+    get: (id: string) => getContract<'/clusters/{clusterID}'>(`/clusters/${id}`).then((r) => r.data),
+    create: (body: ClusterCreateRequest) =>
+      postContract<'/clusters', 201>('/clusters', body).then((r) => r.data),
     update: (id: string, body: ClusterUpdateRequest) =>
-      put<ItemResponse<Cluster>>(`/clusters/${id}`, body).then((r) => r.data),
+      putContract<'/clusters/{clusterID}'>(`/clusters/${id}`, body).then((r) => r.data),
   },
   swarm: {
-    get: () => get<ItemResponse<SwarmInfo>>(clusterPath('/swarm')).then((r) => r.data),
+    get: () => getContract<'/clusters/{clusterID}/swarm'>(clusterPath('/swarm')).then((r) => r.data),
   },
   nodes: {
-    list: () => get<ListResponse<Node>>(clusterPath('/nodes')).then((r) => r.data),
-    get: (id: string) => get<ItemResponse<Node>>(clusterPath(`/nodes/${id}`)).then((r) => r.data),
-    drain: (id: string, reason: string) => post(clusterPath(`/nodes/${id}/drain?reason=${encodeURIComponent(reason)}`)),
-    activate: (id: string, reason: string) => post(clusterPath(`/nodes/${id}/activate?reason=${encodeURIComponent(reason)}`)),
+    list: () => getContract<'/clusters/{clusterID}/nodes'>(clusterPath('/nodes')).then((r) => r.data),
+    get: (id: string) => getContract<'/clusters/{clusterID}/nodes/{id}'>(clusterPath(`/nodes/${id}`)).then((r) => r.data),
+    drain: (id: string, body: ActionReasonRequest) =>
+      postContract<'/clusters/{clusterID}/nodes/{id}/drain'>(clusterPath(`/nodes/${id}/drain`), body).then((r) => r.data),
+    activate: (id: string, body: ActionReasonRequest) =>
+      postContract<'/clusters/{clusterID}/nodes/{id}/activate'>(clusterPath(`/nodes/${id}/activate`), body).then((r) => r.data),
   },
   stacks: {
-    list: () => get<ListResponse<Stack>>(clusterPath('/stacks')).then((r) => r.data),
-    get: (name: string) => get<ItemResponse<Stack>>(clusterPath(`/stacks/${name}`)).then((r) => r.data),
+    list: () => getContract<'/clusters/{clusterID}/stacks'>(clusterPath('/stacks')).then((r) => r.data),
+    get: (name: string) =>
+      getContract<'/clusters/{clusterID}/stacks/{name}'>(clusterPath(`/stacks/${name}`)).then((r) => r.data),
     deploy: (name: string, body: unknown) => post(clusterPath(`/stacks/${name}/deploy`), body),
     remove: (name: string) => del(clusterPath(`/stacks/${name}`)),
   },
   services: {
-    list: (stack?: string) =>
-      get<ListResponse<Service>>(clusterPath(`/services${stack ? `?stack=${stack}` : ''}`)).then((r) => r.data),
-    get: (id: string) => get<ItemResponse<Service>>(clusterPath(`/services/${id}`)).then((r) => r.data),
-    scale: (id: string, replicas: number, reason: string) =>
-      post(clusterPath(`/services/${id}/scale`), { replicas, reason }),
-    restart: (id: string, reason: string) => post(clusterPath(`/services/${id}/restart`), { reason }),
-    update: (id: string, body: unknown) => post(clusterPath(`/services/${id}/update`), body),
-    rollback: (id: string, reason: string) => post(clusterPath(`/services/${id}/rollback`), { reason }),
+    list: (stack?: ServiceListQuery extends { stack?: infer Value } ? Value : never) =>
+      getContract<'/clusters/{clusterID}/services'>(withQuery(clusterPath('/services'), { stack })).then((r) => r.data),
+    get: (id: string) =>
+      getContract<'/clusters/{clusterID}/services/{id}'>(clusterPath(`/services/${id}`)).then((r) => r.data),
+    scale: (id: string, body: ServiceScaleRequest) =>
+      postContract<'/clusters/{clusterID}/services/{id}/scale'>(clusterPath(`/services/${id}/scale`), body).then((r) => r.data),
+    restart: (id: string, body: ActionReasonRequest) =>
+      postContract<'/clusters/{clusterID}/services/{id}/restart'>(clusterPath(`/services/${id}/restart`), body).then((r) => r.data),
+    update: (id: string, body: ServiceUpdateRequest) =>
+      postContract<'/clusters/{clusterID}/services/{id}/update'>(clusterPath(`/services/${id}/update`), body).then((r) => r.data),
+    rollback: (id: string, body: ActionReasonRequest) =>
+      postContract<'/clusters/{clusterID}/services/{id}/rollback'>(clusterPath(`/services/${id}/rollback`), body).then((r) => r.data),
   },
   tasks: {
-    list: (params?: Record<string, string>) => {
-      const qs = params ? `?${new URLSearchParams(params).toString()}` : ''
-      return get<ListResponse<Task>>(clusterPath(`/tasks${qs}`)).then((r) => r.data)
-    },
-    get: (id: string) => get<ItemResponse<Task>>(clusterPath(`/tasks/${id}`)).then((r) => r.data),
+    list: (query?: TaskListQuery) =>
+      getContract<'/clusters/{clusterID}/tasks'>(withQuery(clusterPath('/tasks'), query)).then((r) => r.data),
+    get: (id: string) =>
+      getContract<'/clusters/{clusterID}/tasks/{id}'>(clusterPath(`/tasks/${id}`)).then((r) => r.data),
+    restart: (id: string, body: ActionReasonRequest) =>
+      postContract<'/clusters/{clusterID}/tasks/{id}/restart'>(clusterPath(`/tasks/${id}/restart`), body).then((r) => r.data),
   },
   networks: {
-    list: () => get<ListResponse<Network>>(clusterPath('/networks')).then((r) => r.data),
+    list: () => getContract<'/clusters/{clusterID}/networks'>(clusterPath('/networks')).then((r) => r.data),
   },
   volumes: {
-    list: () => get<ListResponse<Volume>>(clusterPath('/volumes')).then((r) => r.data),
+    list: () => getContract<'/clusters/{clusterID}/volumes'>(clusterPath('/volumes')).then((r) => r.data),
   },
   secrets: {
-    list: () => get<ListResponse<Secret>>(clusterPath('/secrets')).then((r) => r.data),
+    list: () => getContract<'/clusters/{clusterID}/secrets'>(clusterPath('/secrets')).then((r) => r.data),
   },
   configs: {
-    list: () => get<ListResponse<Config>>(clusterPath('/configs')).then((r) => r.data),
+    list: () => getContract<'/clusters/{clusterID}/configs'>(clusterPath('/configs')).then((r) => r.data),
   },
   events: {
-    list: (type?: string) =>
-      get<ListResponse<SwarmEvent>>(clusterPath(`/events${type ? `?type=${type}` : ''}`)).then((r) => r.data),
+    list: (type?: EventListQuery extends { type?: infer Value } ? Value : never) =>
+      getContract<'/clusters/{clusterID}/events'>(withQuery(clusterPath('/events'), { type })).then((r) => r.data),
     stream: () => sse(clusterPath('/stream/events')),
   },
   diagnostics: {
-    list: (severity?: string) =>
-      get<ListResponse<Finding>>(clusterPath(`/diagnostics${severity ? `?severity=${severity}` : ''}`)).then((r) => r.data),
+    list: (severity?: DiagnosticsListQuery extends { severity?: infer Value } ? Value : never) =>
+      getContract<'/clusters/{clusterID}/diagnostics'>(withQuery(clusterPath('/diagnostics'), { severity })).then((r) => r.data),
     run: (reason: string) =>
-      post<ItemResponse<ActionOutcome>>(clusterPath('/actions/execute'), { action: 'diagnostics.run', reason }).then((r) => r.data),
-    get: (id: string) => get<ItemResponse<Finding>>(clusterPath(`/diagnostics/${id}`)).then((r) => r.data),
+      postContract<'/clusters/{clusterID}/actions/execute'>(clusterPath('/actions/execute'), { action: 'diagnostics.run', reason }).then((r) => r.data),
+    get: (id: string) =>
+      getContract<'/clusters/{clusterID}/diagnostics/{id}'>(clusterPath(`/diagnostics/${id}`)).then((r) => r.data),
   },
   incidents: {
-    list: () => get<ListResponse<Incident>>(clusterPath('/incidents')).then((r) => r.data),
+    list: () => getContract<'/clusters/{clusterID}/incidents'>(clusterPath('/incidents')).then((r) => r.data),
     create: (body: IncidentCreateRequest) =>
-      post<ItemResponse<Incident>>(clusterPath('/incidents'), body).then((r) => r.data),
-    get: (id: string) => get<ItemResponse<Incident>>(clusterPath(`/incidents/${id}`)).then((r) => r.data),
+      postContract<'/clusters/{clusterID}/incidents', 201>(clusterPath('/incidents'), body).then((r) => r.data),
+    get: (id: string) =>
+      getContract<'/clusters/{clusterID}/incidents/{id}'>(clusterPath(`/incidents/${id}`)).then((r) => r.data),
     update: (id: string, body: IncidentUpdateRequest) =>
-      put<ItemResponse<Incident>>(clusterPath(`/incidents/${id}`), body).then((r) => r.data),
-    resolve: (id: string) => post<ItemResponse<Incident>>(clusterPath(`/incidents/${id}/resolve`)).then((r) => r.data),
+      putContract<'/clusters/{clusterID}/incidents/{id}'>(clusterPath(`/incidents/${id}`), body).then((r) => r.data),
+    resolve: (id: string) =>
+      postContract<'/clusters/{clusterID}/incidents/{id}/resolve'>(clusterPath(`/incidents/${id}/resolve`)).then((r) => r.data),
   },
   audit: {
     list: (limit = 50, offset = 0) =>
-      get<ListResponse<AuditEntry>>(clusterPath(`/audit?limit=${limit}&offset=${offset}`)).then((r) => r.data),
+      getContract<'/clusters/{clusterID}/audit'>(
+        withQuery(clusterPath('/audit'), { limit, offset } satisfies AuditListQuery),
+      ).then((r) => r.data),
   },
   ops: {
-    metrics: () => get<ItemResponse<OpsMetrics>>(clusterPath('/ops/metrics')).then((r) => r.data),
-    insights: () => get<ItemResponse<OpsInsights>>(clusterPath('/ops/insights')).then((r) => r.data),
+    metrics: () => getContract<'/clusters/{clusterID}/ops/metrics'>(clusterPath('/ops/metrics')).then((r) => r.data),
+    insights: () => getContract<'/clusters/{clusterID}/ops/insights'>(clusterPath('/ops/insights')).then((r) => r.data),
   },
   actions: {
-    list: () => get<ListResponse<ActionRun>>(clusterPath('/actions')).then((r) => r.data),
+    list: () => getContract<'/clusters/{clusterID}/actions'>(clusterPath('/actions')).then((r) => r.data),
     execute: (payload: ActionExecuteRequest) =>
-      post<ItemResponse<ActionOutcome>>(clusterPath('/actions/execute'), payload).then((r) => r.data),
+      postContract<'/clusters/{clusterID}/actions/execute'>(clusterPath('/actions/execute'), payload).then((r) => r.data),
   },
   approvals: {
     list: (status?: ApprovalStatus) =>
-      get<ListResponse<ApprovalRequest>>(clusterPath(`/approvals${status ? `?status=${status}` : ''}`)).then((r) => r.data),
-    approve: (id: string) => post<ItemResponse<ActionOutcome>>(clusterPath(`/approvals/${id}/approve`)).then((r) => r.data),
-    reject: (id: string) => post<ItemResponse<ActionOutcome>>(clusterPath(`/approvals/${id}/reject`)).then((r) => r.data),
+      getContract<'/clusters/{clusterID}/approvals'>(
+        withQuery(clusterPath('/approvals'), { status } satisfies ApprovalListQuery),
+      ).then((r) => r.data),
+    approve: (id: string) =>
+      postContract<'/clusters/{clusterID}/approvals/{id}/approve'>(clusterPath(`/approvals/${id}/approve`)).then((r) => r.data),
+    reject: (id: string) =>
+      postContract<'/clusters/{clusterID}/approvals/{id}/reject'>(clusterPath(`/approvals/${id}/reject`)).then((r) => r.data),
   },
   assistant: {
-    sessions: () => get<ListResponse<AssistantSession>>(clusterPath('/assistant/sessions')).then((r) => r.data),
+    sessions: () =>
+      getContract<'/clusters/{clusterID}/assistant/sessions'>(clusterPath('/assistant/sessions')).then((r) => r.data),
     createSession: (body?: AssistantSessionCreateRequest) =>
-      post<ItemResponse<AssistantSession>>(clusterPath('/assistant/sessions'), body ?? {}).then((r) => r.data),
-    getSession: (id: string) => get<ItemResponse<AssistantSession>>(clusterPath(`/assistant/sessions/${id}`)).then((r) => r.data),
+      postContract<'/clusters/{clusterID}/assistant/sessions', 201>(clusterPath('/assistant/sessions'), body ?? {}).then((r) => r.data),
+    getSession: (id: string) =>
+      getContract<'/clusters/{clusterID}/assistant/sessions/{id}'>(clusterPath(`/assistant/sessions/${id}`)).then((r) => r.data),
     chatStream: async (
       payload: AssistantChatRequest,
       handlers: {

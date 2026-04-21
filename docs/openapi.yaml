@@ -173,6 +173,50 @@ paths:
                 $ref: '#/components/schemas/NodeItemResponse'
         '404':
           $ref: '#/components/responses/NotFound'
+  /clusters/{clusterID}/nodes/{id}/drain:
+    post:
+      tags: [Actions]
+      summary: Drain node scheduling
+      parameters:
+        - $ref: '#/components/parameters/ClusterID'
+        - $ref: '#/components/parameters/EntityID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ActionReasonRequest'
+      responses:
+        '200':
+          description: Node drain outcome
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionOutcomeItemResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /clusters/{clusterID}/nodes/{id}/activate:
+    post:
+      tags: [Actions]
+      summary: Resume node scheduling
+      parameters:
+        - $ref: '#/components/parameters/ClusterID'
+        - $ref: '#/components/parameters/EntityID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ActionReasonRequest'
+      responses:
+        '200':
+          description: Node activate outcome
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionOutcomeItemResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /clusters/{clusterID}/stacks:
     get:
       tags: [Inventory]
@@ -239,6 +283,94 @@ paths:
                 $ref: '#/components/schemas/ServiceItemResponse'
         '404':
           $ref: '#/components/responses/NotFound'
+  /clusters/{clusterID}/services/{id}/scale:
+    post:
+      tags: [Actions]
+      summary: Scale service
+      parameters:
+        - $ref: '#/components/parameters/ClusterID'
+        - $ref: '#/components/parameters/EntityID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ServiceScaleRequest'
+      responses:
+        '200':
+          description: Service scale outcome
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionOutcomeItemResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /clusters/{clusterID}/services/{id}/restart:
+    post:
+      tags: [Actions]
+      summary: Restart service
+      parameters:
+        - $ref: '#/components/parameters/ClusterID'
+        - $ref: '#/components/parameters/EntityID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ActionReasonRequest'
+      responses:
+        '200':
+          description: Service restart outcome
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionOutcomeItemResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /clusters/{clusterID}/services/{id}/update:
+    post:
+      tags: [Actions]
+      summary: Update service spec
+      parameters:
+        - $ref: '#/components/parameters/ClusterID'
+        - $ref: '#/components/parameters/EntityID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ServiceUpdateRequest'
+      responses:
+        '200':
+          description: Service update outcome
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionOutcomeItemResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /clusters/{clusterID}/services/{id}/rollback:
+    post:
+      tags: [Actions]
+      summary: Roll back service to previous spec
+      parameters:
+        - $ref: '#/components/parameters/ClusterID'
+        - $ref: '#/components/parameters/EntityID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ActionReasonRequest'
+      responses:
+        '200':
+          description: Service rollback outcome
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionOutcomeItemResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /clusters/{clusterID}/tasks:
     get:
       tags: [Inventory]
@@ -278,6 +410,28 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/TaskItemResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /clusters/{clusterID}/tasks/{id}/restart:
+    post:
+      tags: [Actions]
+      summary: Restart task
+      parameters:
+        - $ref: '#/components/parameters/ClusterID'
+        - $ref: '#/components/parameters/EntityID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ActionReasonRequest'
+      responses:
+        '200':
+          description: Task restart outcome
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionOutcomeItemResponse'
         '404':
           $ref: '#/components/responses/NotFound'
   /clusters/{clusterID}/networks:
@@ -379,6 +533,22 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/FindingListResponse'
+  /clusters/{clusterID}/diagnostics/{id}:
+    get:
+      tags: [Operations]
+      summary: Get diagnostics finding
+      parameters:
+        - $ref: '#/components/parameters/ClusterID'
+        - $ref: '#/components/parameters/EntityID'
+      responses:
+        '200':
+          description: Diagnostics finding
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FindingItemResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /clusters/{clusterID}/incidents:
     get:
       tags: [Incidents]
@@ -1558,6 +1728,28 @@ components:
           type: string
         incidentID:
           type: string
+    ActionReasonRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          type: string
+    ServiceScaleRequest:
+      type: object
+      required: [replicas, reason]
+      properties:
+        replicas:
+          type: integer
+          minimum: 0
+        reason:
+          type: string
+    ServiceUpdateRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          type: string
+      additionalProperties: true
     ActionExecuteRequest:
       type: object
       required: [action, reason]
@@ -1836,6 +2028,12 @@ components:
             $ref: '#/components/schemas/Finding'
         meta:
           $ref: '#/components/schemas/ListMeta'
+    FindingItemResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/Finding'
     IncidentItemResponse:
       type: object
       required: [data]

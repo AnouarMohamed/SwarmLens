@@ -454,6 +454,94 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/clusters/{clusterID}/nodes/{id}/drain": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Drain node scheduling */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    clusterID: components["parameters"]["ClusterID"];
+                    id: components["parameters"]["EntityID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["ActionReasonRequest"];
+                };
+            };
+            responses: {
+                /** @description Node drain outcome */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ActionOutcomeItemResponse"];
+                    };
+                };
+                404: components["responses"]["NotFound"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/clusters/{clusterID}/nodes/{id}/activate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resume node scheduling */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    clusterID: components["parameters"]["ClusterID"];
+                    id: components["parameters"]["EntityID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["ActionReasonRequest"];
+                };
+            };
+            responses: {
+                /** @description Node activate outcome */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ActionOutcomeItemResponse"];
+                    };
+                };
+                404: components["responses"]["NotFound"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/clusters/{clusterID}/stacks": {
         parameters: {
             query?: never;
@@ -612,6 +700,182 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/clusters/{clusterID}/services/{id}/scale": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Scale service */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    clusterID: components["parameters"]["ClusterID"];
+                    id: components["parameters"]["EntityID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["ServiceScaleRequest"];
+                };
+            };
+            responses: {
+                /** @description Service scale outcome */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ActionOutcomeItemResponse"];
+                    };
+                };
+                404: components["responses"]["NotFound"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/clusters/{clusterID}/services/{id}/restart": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Restart service */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    clusterID: components["parameters"]["ClusterID"];
+                    id: components["parameters"]["EntityID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["ActionReasonRequest"];
+                };
+            };
+            responses: {
+                /** @description Service restart outcome */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ActionOutcomeItemResponse"];
+                    };
+                };
+                404: components["responses"]["NotFound"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/clusters/{clusterID}/services/{id}/update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Update service spec */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    clusterID: components["parameters"]["ClusterID"];
+                    id: components["parameters"]["EntityID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["ServiceUpdateRequest"];
+                };
+            };
+            responses: {
+                /** @description Service update outcome */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ActionOutcomeItemResponse"];
+                    };
+                };
+                404: components["responses"]["NotFound"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/clusters/{clusterID}/services/{id}/rollback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Roll back service to previous spec */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    clusterID: components["parameters"]["ClusterID"];
+                    id: components["parameters"]["EntityID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["ActionReasonRequest"];
+                };
+            };
+            responses: {
+                /** @description Service rollback outcome */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ActionOutcomeItemResponse"];
+                    };
+                };
+                404: components["responses"]["NotFound"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/clusters/{clusterID}/tasks": {
         parameters: {
             query?: never;
@@ -688,6 +952,50 @@ export interface paths {
         };
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/clusters/{clusterID}/tasks/{id}/restart": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Restart task */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    clusterID: components["parameters"]["ClusterID"];
+                    id: components["parameters"]["EntityID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["ActionReasonRequest"];
+                };
+            };
+            responses: {
+                /** @description Task restart outcome */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ActionOutcomeItemResponse"];
+                    };
+                };
+                404: components["responses"]["NotFound"];
+            };
+        };
         delete?: never;
         options?: never;
         head?: never;
@@ -954,6 +1262,46 @@ export interface paths {
                         "application/json": components["schemas"]["FindingListResponse"];
                     };
                 };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/clusters/{clusterID}/diagnostics/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get diagnostics finding */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    clusterID: components["parameters"]["ClusterID"];
+                    id: components["parameters"]["EntityID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Diagnostics finding */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["FindingItemResponse"];
+                    };
+                };
+                404: components["responses"]["NotFound"];
             };
         };
         put?: never;
@@ -2051,6 +2399,18 @@ export interface components {
             sessionID?: string;
             incidentID?: string;
         };
+        ActionReasonRequest: {
+            reason: string;
+        };
+        ServiceScaleRequest: {
+            replicas: number;
+            reason: string;
+        };
+        ServiceUpdateRequest: {
+            reason: string;
+        } & {
+            [key: string]: unknown;
+        };
         ActionExecuteRequest: {
             action: string;
             resource?: string;
@@ -2176,6 +2536,9 @@ export interface components {
         FindingListResponse: {
             data: components["schemas"]["Finding"][];
             meta: components["schemas"]["ListMeta"];
+        };
+        FindingItemResponse: {
+            data: components["schemas"]["Finding"];
         };
         IncidentItemResponse: {
             data: components["schemas"]["Incident"];
