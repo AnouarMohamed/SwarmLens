@@ -19,137 +19,39 @@ export type SwarmInfo = ContractSchema<'SwarmInfo'>
 export type RiskAssessment = ContractSchema<'RiskAssessment'>
 
 // ── Nodes ─────────────────────────────────────────────────────────────────────
-export interface Node {
-  id: string
-  hostname: string
-  role: 'manager' | 'worker'
-  availability: 'active' | 'pause' | 'drain'
-  state: 'ready' | 'down' | 'disconnected' | 'unknown'
-  labels: Record<string, string>
-  cpuTotal: number
-  cpuReserved: number
-  memTotal: number
-  memReserved: number
-  runningTasks: number
-  managerStatus?: { leader: boolean; reachability: 'reachable' | 'unreachable' }
-  engineVersion: string
-  addr: string
-}
+export type ManagerStatus = ContractSchema<'ManagerStatus'>
+export type NodeRole = ContractSchema<'NodeRole'>
+export type NodeAvailability = ContractSchema<'NodeAvailability'>
+export type NodeState = ContractSchema<'NodeState'>
+export type Reachability = ContractSchema<'Reachability'>
+export type Node = ContractSchema<'Node'>
 
 // ── Stacks ────────────────────────────────────────────────────────────────────
-export interface Stack {
-  name: string
-  serviceCount: number
-  runningServices: number
-  totalReplicas: number
-  runningReplicas: number
-  healthScore: number
-}
+export type Stack = ContractSchema<'Stack'>
 
 // ── Services ──────────────────────────────────────────────────────────────────
-export type UpdateState =
-  | 'updating' | 'paused' | 'completed'
-  | 'rollback_started' | 'rollback_paused' | 'rollback_completed' | ''
-
-export interface PublishedPort {
-  publishedPort: number
-  targetPort: number
-  protocol: string
-}
-
-export interface Service {
-  id: string
-  name: string
-  stack: string
-  image: string
-  mode: 'replicated' | 'global'
-  desiredReplicas: number
-  runningTasks: number
-  failedTasks: number
-  updateState: UpdateState
-  updateParallelism: number
-  updateDelay: string
-  updateFailureAction: string
-  rollbackParallelism: number
-  rollbackDelay: string
-  constraints: string[]
-  preferences: string[]
-  publishedPorts: PublishedPort[]
-  secretRefs: string[]
-  configRefs: string[]
-  networkRefs: string[]
-  createdAt: string
-  updatedAt: string
-}
+export type ServiceMode = ContractSchema<'ServiceMode'>
+export type UpdateState = ContractSchema<'UpdateState'>
+export type PublishedPort = ContractSchema<'PublishedPort'>
+export type Service = ContractSchema<'Service'>
 
 // ── Tasks ─────────────────────────────────────────────────────────────────────
-export type TaskState =
-  | 'new' | 'pending' | 'assigned' | 'accepted' | 'preparing'
-  | 'ready' | 'starting' | 'running' | 'complete' | 'shutdown'
-  | 'failed' | 'rejected' | 'remove' | 'orphaned'
-
-export interface Task {
-  id: string
-  serviceID: string
-  serviceName: string
-  nodeID: string
-  nodeHostname: string
-  desiredState: TaskState
-  currentState: TaskState
-  exitCode: number
-  error: string
-  image: string
-  restartCount: number
-  createdAt: string
-  updatedAt: string
-}
+export type TaskState = ContractSchema<'TaskState'>
+export type Task = ContractSchema<'Task'>
 
 // ── Networks ──────────────────────────────────────────────────────────────────
-export interface Network {
-  id: string
-  name: string
-  driver: string
-  scope: 'swarm' | 'local' | 'global'
-  subnet: string
-  attachable: boolean
-  ingress: boolean
-  serviceCount: number
-}
+export type NetworkScope = ContractSchema<'NetworkScope'>
+export type Network = ContractSchema<'Network'>
 
 // ── Volumes ───────────────────────────────────────────────────────────────────
-export interface Volume {
-  name: string
-  driver: string
-  scope: string
-  mountpoint: string
-  labels: Record<string, string>
-}
+export type Volume = ContractSchema<'Volume'>
 
 // ── Secrets & Configs ─────────────────────────────────────────────────────────
-export interface Secret {
-  id: string
-  name: string
-  createdAt: string
-  updatedAt: string
-  serviceRefs: string[]
-}
-
-export interface Config {
-  id: string
-  name: string
-  createdAt: string
-  updatedAt: string
-  serviceRefs: string[]
-}
+export type Secret = ContractSchema<'Secret'>
+export type Config = ContractSchema<'Config'>
 
 // ── Events ────────────────────────────────────────────────────────────────────
-export interface SwarmEvent {
-  type: string
-  action: string
-  actor: string
-  message: string
-  timestamp: string
-}
+export type SwarmEvent = ContractSchema<'SwarmEvent'>
 
 // ── Diagnostics ───────────────────────────────────────────────────────────────
 export type Finding = ContractSchema<'Finding'>
@@ -180,26 +82,8 @@ export interface APIError {
   code: string
 }
 
-export interface OpsMetricPoint {
-  timestamp: string
-  healthyRatio: number
-  managersOnline: number
-  workersOnline: number
-  runningTasks: number
-  failedTasks: number
-  restartCount: number
-  critical: number
-  warning: number
-  riskScore: number
-}
-
-export interface ServiceRisk {
-  service: string
-  score: number
-  reasons: string[]
-  actionability: 'immediate' | 'soon' | 'monitor' | string
-}
-
+export type OpsMetricPoint = ContractSchema<'OpsMetricPoint'>
+export type ServiceRisk = ContractSchema<'ServiceRisk'>
 export type OpsMetrics = ContractSchema<'OpsMetrics'>
 
 export type InsightHypothesis = ContractSchema<'InsightHypothesis'>

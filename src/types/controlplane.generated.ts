@@ -376,6 +376,554 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/clusters/{clusterID}/nodes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List nodes */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    clusterID: components["parameters"]["ClusterID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Nodes */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["NodeListResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/clusters/{clusterID}/nodes/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get node */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    clusterID: components["parameters"]["ClusterID"];
+                    id: components["parameters"]["EntityID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Node detail */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["NodeItemResponse"];
+                    };
+                };
+                404: components["responses"]["NotFound"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/clusters/{clusterID}/stacks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List stacks */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    clusterID: components["parameters"]["ClusterID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Stacks */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StackListResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/clusters/{clusterID}/stacks/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get stack */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    clusterID: components["parameters"]["ClusterID"];
+                    name: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Stack detail */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StackItemResponse"];
+                    };
+                };
+                404: components["responses"]["NotFound"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/clusters/{clusterID}/services": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List services */
+        get: {
+            parameters: {
+                query?: {
+                    stack?: string;
+                };
+                header?: never;
+                path: {
+                    clusterID: components["parameters"]["ClusterID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Services */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ServiceListResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/clusters/{clusterID}/services/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get service */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    clusterID: components["parameters"]["ClusterID"];
+                    id: components["parameters"]["EntityID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Service detail */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ServiceItemResponse"];
+                    };
+                };
+                404: components["responses"]["NotFound"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/clusters/{clusterID}/tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List tasks */
+        get: {
+            parameters: {
+                query?: {
+                    service?: string;
+                    node?: string;
+                    state?: components["schemas"]["TaskState"];
+                };
+                header?: never;
+                path: {
+                    clusterID: components["parameters"]["ClusterID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Tasks */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["TaskListResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/clusters/{clusterID}/tasks/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get task */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    clusterID: components["parameters"]["ClusterID"];
+                    id: components["parameters"]["EntityID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Task detail */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["TaskItemResponse"];
+                    };
+                };
+                404: components["responses"]["NotFound"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/clusters/{clusterID}/networks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List networks */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    clusterID: components["parameters"]["ClusterID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Networks */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["NetworkListResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/clusters/{clusterID}/volumes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List volumes */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    clusterID: components["parameters"]["ClusterID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Volumes */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["VolumeListResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/clusters/{clusterID}/secrets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List secrets */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    clusterID: components["parameters"]["ClusterID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Secrets */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["SecretListResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/clusters/{clusterID}/configs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List configs */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    clusterID: components["parameters"]["ClusterID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Configs */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ConfigListResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/clusters/{clusterID}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List recent cluster events */
+        get: {
+            parameters: {
+                query?: {
+                    type?: string;
+                };
+                header?: never;
+                path: {
+                    clusterID: components["parameters"]["ClusterID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Events */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["SwarmEventListResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/clusters/{clusterID}/stream/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Stream cluster events */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    clusterID: components["parameters"]["ClusterID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Event stream */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/event-stream": string;
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/clusters/{clusterID}/diagnostics": {
         parameters: {
             query?: never;
@@ -1071,6 +1619,22 @@ export interface components {
         /** @enum {string} */
         ClusterConnectionMode: "direct" | "demo";
         /** @enum {string} */
+        NodeRole: "manager" | "worker";
+        /** @enum {string} */
+        NodeAvailability: "active" | "pause" | "drain";
+        /** @enum {string} */
+        NodeState: "ready" | "down" | "disconnected" | "unknown";
+        /** @enum {string} */
+        Reachability: "reachable" | "unreachable";
+        /** @enum {string} */
+        ServiceMode: "replicated" | "global";
+        /** @enum {string} */
+        UpdateState: "updating" | "paused" | "completed" | "rollback_started" | "rollback_paused" | "rollback_completed" | "";
+        /** @enum {string} */
+        TaskState: "new" | "pending" | "assigned" | "accepted" | "preparing" | "ready" | "starting" | "running" | "complete" | "shutdown" | "failed" | "rejected" | "remove" | "orphaned";
+        /** @enum {string} */
+        NetworkScope: "swarm" | "local" | "global";
+        /** @enum {string} */
         IncidentStatus: "open" | "investigating" | "mitigating" | "resolved";
         /** @enum {string} */
         ActionStatus: "success" | "failed" | "dry_run" | "blocked" | "pending_approval";
@@ -1156,6 +1720,135 @@ export interface components {
             lastSyncAt: string;
             syncError?: string;
             risk: components["schemas"]["RiskAssessment"];
+        };
+        ManagerStatus: {
+            leader: boolean;
+            reachability: components["schemas"]["Reachability"];
+        };
+        Node: {
+            id: string;
+            hostname: string;
+            role: components["schemas"]["NodeRole"];
+            availability: components["schemas"]["NodeAvailability"];
+            state: components["schemas"]["NodeState"];
+            labels: {
+                [key: string]: string;
+            };
+            /** Format: int64 */
+            cpuTotal: number;
+            /** Format: int64 */
+            cpuReserved: number;
+            /** Format: int64 */
+            memTotal: number;
+            /** Format: int64 */
+            memReserved: number;
+            runningTasks: number;
+            managerStatus?: components["schemas"]["ManagerStatus"];
+            engineVersion: string;
+            addr: string;
+        };
+        Stack: {
+            name: string;
+            serviceCount: number;
+            runningServices: number;
+            totalReplicas: number;
+            runningReplicas: number;
+            healthScore: number;
+        };
+        PublishedPort: {
+            publishedPort: number;
+            targetPort: number;
+            protocol: string;
+        };
+        Service: {
+            id: string;
+            name: string;
+            stack: string;
+            image: string;
+            mode: components["schemas"]["ServiceMode"];
+            desiredReplicas: number;
+            runningTasks: number;
+            failedTasks: number;
+            updateState: components["schemas"]["UpdateState"];
+            /** Format: int64 */
+            updateParallelism: number;
+            updateDelay: string;
+            updateFailureAction: string;
+            /** Format: int64 */
+            rollbackParallelism: number;
+            rollbackDelay: string;
+            constraints: string[];
+            preferences: string[];
+            publishedPorts: components["schemas"]["PublishedPort"][];
+            secretRefs: string[];
+            configRefs: string[];
+            networkRefs: string[];
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        Task: {
+            id: string;
+            serviceID: string;
+            serviceName: string;
+            nodeID: string;
+            nodeHostname: string;
+            desiredState: components["schemas"]["TaskState"];
+            currentState: components["schemas"]["TaskState"];
+            exitCode: number;
+            error: string;
+            image: string;
+            restartCount: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        Network: {
+            id: string;
+            name: string;
+            driver: string;
+            scope: components["schemas"]["NetworkScope"];
+            subnet: string;
+            attachable: boolean;
+            ingress: boolean;
+            serviceCount: number;
+        };
+        Volume: {
+            name: string;
+            driver: string;
+            scope: string;
+            mountpoint: string;
+            labels: {
+                [key: string]: string;
+            };
+        };
+        Secret: {
+            id: string;
+            name: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+            serviceRefs: string[];
+        };
+        Config: {
+            id: string;
+            name: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+            serviceRefs: string[];
+        };
+        SwarmEvent: {
+            type: string;
+            action: string;
+            actor: string;
+            message: string;
+            /** Format: date-time */
+            timestamp: string;
         };
         Finding: {
             id: string;
@@ -1431,6 +2124,54 @@ export interface components {
         };
         SwarmInfoItemResponse: {
             data: components["schemas"]["SwarmInfo"];
+        };
+        NodeItemResponse: {
+            data: components["schemas"]["Node"];
+        };
+        NodeListResponse: {
+            data: components["schemas"]["Node"][];
+            meta: components["schemas"]["ListMeta"];
+        };
+        StackItemResponse: {
+            data: components["schemas"]["Stack"];
+        };
+        StackListResponse: {
+            data: components["schemas"]["Stack"][];
+            meta: components["schemas"]["ListMeta"];
+        };
+        ServiceItemResponse: {
+            data: components["schemas"]["Service"];
+        };
+        ServiceListResponse: {
+            data: components["schemas"]["Service"][];
+            meta: components["schemas"]["ListMeta"];
+        };
+        TaskItemResponse: {
+            data: components["schemas"]["Task"];
+        };
+        TaskListResponse: {
+            data: components["schemas"]["Task"][];
+            meta: components["schemas"]["ListMeta"];
+        };
+        NetworkListResponse: {
+            data: components["schemas"]["Network"][];
+            meta: components["schemas"]["ListMeta"];
+        };
+        VolumeListResponse: {
+            data: components["schemas"]["Volume"][];
+            meta: components["schemas"]["ListMeta"];
+        };
+        SecretListResponse: {
+            data: components["schemas"]["Secret"][];
+            meta: components["schemas"]["ListMeta"];
+        };
+        ConfigListResponse: {
+            data: components["schemas"]["Config"][];
+            meta: components["schemas"]["ListMeta"];
+        };
+        SwarmEventListResponse: {
+            data: components["schemas"]["SwarmEvent"][];
+            meta: components["schemas"]["ListMeta"];
         };
         FindingListResponse: {
             data: components["schemas"]["Finding"][];

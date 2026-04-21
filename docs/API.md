@@ -77,11 +77,36 @@ Legacy single-cluster aliases still exist for compatibility, but they are intent
 | GET    | `/clusters/{clusterID}` | admin |
 | PUT    | `/clusters/{clusterID}` | admin |
 
+### Inventory and workload reads
+
+| Method | Path                                        | Auth   |
+| ------ | ------------------------------------------- | ------ |
+| GET    | `/clusters/{clusterID}/swarm`               | viewer |
+| GET    | `/clusters/{clusterID}/nodes`               | viewer |
+| GET    | `/clusters/{clusterID}/nodes/{id}`          | viewer |
+| GET    | `/clusters/{clusterID}/stacks`              | viewer |
+| GET    | `/clusters/{clusterID}/stacks/{name}`       | viewer |
+| GET    | `/clusters/{clusterID}/services`            | viewer |
+| GET    | `/clusters/{clusterID}/services/{id}`       | viewer |
+| GET    | `/clusters/{clusterID}/tasks`               | viewer |
+| GET    | `/clusters/{clusterID}/tasks/{id}`          | viewer |
+| GET    | `/clusters/{clusterID}/networks`            | viewer |
+| GET    | `/clusters/{clusterID}/volumes`             | viewer |
+| GET    | `/clusters/{clusterID}/secrets`             | viewer |
+| GET    | `/clusters/{clusterID}/configs`             | viewer |
+| GET    | `/clusters/{clusterID}/events`              | viewer |
+| GET    | `/clusters/{clusterID}/stream/events`       | viewer |
+
+Useful query parameters:
+
+- `GET /clusters/{clusterID}/services?stack=<stackName>`
+- `GET /clusters/{clusterID}/tasks?service=<idOrName>&node=<idOrHost>&state=<state>`
+- `GET /clusters/{clusterID}/events?type=<eventType>`
+
 ### Cluster posture and intelligence
 
 | Method | Path                                   | Auth   |
 | ------ | -------------------------------------- | ------ |
-| GET    | `/clusters/{clusterID}/swarm`          | viewer |
 | GET    | `/clusters/{clusterID}/diagnostics`    | viewer |
 | GET    | `/clusters/{clusterID}/ops/metrics`    | viewer |
 | GET    | `/clusters/{clusterID}/ops/insights`   | viewer |
@@ -137,6 +162,15 @@ SSE events currently include:
 ## Contract generation workflow
 
 Frontend control-plane types are generated from `docs/openapi.yaml`.
+
+The generated contract now covers:
+
+- auth and session identity
+- cluster management
+- cluster posture
+- inventory and workload read models
+- diagnostics, incidents, audit
+- actions, approvals, assistant sessions
 
 Regenerate them with:
 

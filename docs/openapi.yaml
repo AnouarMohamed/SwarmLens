@@ -11,6 +11,7 @@ tags:
   - name: Observability
   - name: Auth
   - name: Clusters
+  - name: Inventory
   - name: Operations
   - name: Incidents
   - name: Audit
@@ -143,6 +144,224 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SwarmInfoItemResponse'
+  /clusters/{clusterID}/nodes:
+    get:
+      tags: [Inventory]
+      summary: List nodes
+      parameters:
+        - $ref: '#/components/parameters/ClusterID'
+      responses:
+        '200':
+          description: Nodes
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NodeListResponse'
+  /clusters/{clusterID}/nodes/{id}:
+    get:
+      tags: [Inventory]
+      summary: Get node
+      parameters:
+        - $ref: '#/components/parameters/ClusterID'
+        - $ref: '#/components/parameters/EntityID'
+      responses:
+        '200':
+          description: Node detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NodeItemResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /clusters/{clusterID}/stacks:
+    get:
+      tags: [Inventory]
+      summary: List stacks
+      parameters:
+        - $ref: '#/components/parameters/ClusterID'
+      responses:
+        '200':
+          description: Stacks
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StackListResponse'
+  /clusters/{clusterID}/stacks/{name}:
+    get:
+      tags: [Inventory]
+      summary: Get stack
+      parameters:
+        - $ref: '#/components/parameters/ClusterID'
+        - in: path
+          name: name
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Stack detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StackItemResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /clusters/{clusterID}/services:
+    get:
+      tags: [Inventory]
+      summary: List services
+      parameters:
+        - $ref: '#/components/parameters/ClusterID'
+        - in: query
+          name: stack
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Services
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceListResponse'
+  /clusters/{clusterID}/services/{id}:
+    get:
+      tags: [Inventory]
+      summary: Get service
+      parameters:
+        - $ref: '#/components/parameters/ClusterID'
+        - $ref: '#/components/parameters/EntityID'
+      responses:
+        '200':
+          description: Service detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceItemResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /clusters/{clusterID}/tasks:
+    get:
+      tags: [Inventory]
+      summary: List tasks
+      parameters:
+        - $ref: '#/components/parameters/ClusterID'
+        - in: query
+          name: service
+          schema:
+            type: string
+        - in: query
+          name: node
+          schema:
+            type: string
+        - in: query
+          name: state
+          schema:
+            $ref: '#/components/schemas/TaskState'
+      responses:
+        '200':
+          description: Tasks
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskListResponse'
+  /clusters/{clusterID}/tasks/{id}:
+    get:
+      tags: [Inventory]
+      summary: Get task
+      parameters:
+        - $ref: '#/components/parameters/ClusterID'
+        - $ref: '#/components/parameters/EntityID'
+      responses:
+        '200':
+          description: Task detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskItemResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /clusters/{clusterID}/networks:
+    get:
+      tags: [Inventory]
+      summary: List networks
+      parameters:
+        - $ref: '#/components/parameters/ClusterID'
+      responses:
+        '200':
+          description: Networks
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NetworkListResponse'
+  /clusters/{clusterID}/volumes:
+    get:
+      tags: [Inventory]
+      summary: List volumes
+      parameters:
+        - $ref: '#/components/parameters/ClusterID'
+      responses:
+        '200':
+          description: Volumes
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VolumeListResponse'
+  /clusters/{clusterID}/secrets:
+    get:
+      tags: [Inventory]
+      summary: List secrets
+      parameters:
+        - $ref: '#/components/parameters/ClusterID'
+      responses:
+        '200':
+          description: Secrets
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SecretListResponse'
+  /clusters/{clusterID}/configs:
+    get:
+      tags: [Inventory]
+      summary: List configs
+      parameters:
+        - $ref: '#/components/parameters/ClusterID'
+      responses:
+        '200':
+          description: Configs
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConfigListResponse'
+  /clusters/{clusterID}/events:
+    get:
+      tags: [Inventory]
+      summary: List recent cluster events
+      parameters:
+        - $ref: '#/components/parameters/ClusterID'
+        - in: query
+          name: type
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Events
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SwarmEventListResponse'
+  /clusters/{clusterID}/stream/events:
+    get:
+      tags: [Inventory]
+      summary: Stream cluster events
+      parameters:
+        - $ref: '#/components/parameters/ClusterID'
+      responses:
+        '200':
+          description: Event stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
   /clusters/{clusterID}/diagnostics:
     get:
       tags: [Operations]
@@ -497,6 +716,30 @@ components:
     ClusterConnectionMode:
       type: string
       enum: [direct, demo]
+    NodeRole:
+      type: string
+      enum: [manager, worker]
+    NodeAvailability:
+      type: string
+      enum: [active, pause, drain]
+    NodeState:
+      type: string
+      enum: [ready, down, disconnected, unknown]
+    Reachability:
+      type: string
+      enum: [reachable, unreachable]
+    ServiceMode:
+      type: string
+      enum: [replicated, global]
+    UpdateState:
+      type: string
+      enum: [updating, paused, completed, rollback_started, rollback_paused, rollback_completed, ""]
+    TaskState:
+      type: string
+      enum: [new, pending, assigned, accepted, preparing, ready, starting, running, complete, shutdown, failed, rejected, remove, orphaned]
+    NetworkScope:
+      type: string
+      enum: [swarm, local, global]
     IncidentStatus:
       type: string
       enum: [open, investigating, mitigating, resolved]
@@ -661,6 +904,261 @@ components:
           type: string
         risk:
           $ref: '#/components/schemas/RiskAssessment'
+    ManagerStatus:
+      type: object
+      required: [leader, reachability]
+      properties:
+        leader:
+          type: boolean
+        reachability:
+          $ref: '#/components/schemas/Reachability'
+    Node:
+      type: object
+      required: [id, hostname, role, availability, state, labels, cpuTotal, cpuReserved, memTotal, memReserved, runningTasks, engineVersion, addr]
+      properties:
+        id:
+          type: string
+        hostname:
+          type: string
+        role:
+          $ref: '#/components/schemas/NodeRole'
+        availability:
+          $ref: '#/components/schemas/NodeAvailability'
+        state:
+          $ref: '#/components/schemas/NodeState'
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+        cpuTotal:
+          type: integer
+          format: int64
+        cpuReserved:
+          type: integer
+          format: int64
+        memTotal:
+          type: integer
+          format: int64
+        memReserved:
+          type: integer
+          format: int64
+        runningTasks:
+          type: integer
+        managerStatus:
+          $ref: '#/components/schemas/ManagerStatus'
+        engineVersion:
+          type: string
+        addr:
+          type: string
+    Stack:
+      type: object
+      required: [name, serviceCount, runningServices, totalReplicas, runningReplicas, healthScore]
+      properties:
+        name:
+          type: string
+        serviceCount:
+          type: integer
+        runningServices:
+          type: integer
+        totalReplicas:
+          type: integer
+        runningReplicas:
+          type: integer
+        healthScore:
+          type: integer
+    PublishedPort:
+      type: object
+      required: [publishedPort, targetPort, protocol]
+      properties:
+        publishedPort:
+          type: integer
+        targetPort:
+          type: integer
+        protocol:
+          type: string
+    Service:
+      type: object
+      required: [id, name, stack, image, mode, desiredReplicas, runningTasks, failedTasks, updateState, updateParallelism, updateDelay, updateFailureAction, rollbackParallelism, rollbackDelay, constraints, preferences, publishedPorts, secretRefs, configRefs, networkRefs, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        stack:
+          type: string
+        image:
+          type: string
+        mode:
+          $ref: '#/components/schemas/ServiceMode'
+        desiredReplicas:
+          type: integer
+        runningTasks:
+          type: integer
+        failedTasks:
+          type: integer
+        updateState:
+          $ref: '#/components/schemas/UpdateState'
+        updateParallelism:
+          type: integer
+          format: int64
+        updateDelay:
+          type: string
+        updateFailureAction:
+          type: string
+        rollbackParallelism:
+          type: integer
+          format: int64
+        rollbackDelay:
+          type: string
+        constraints:
+          type: array
+          items:
+            type: string
+        preferences:
+          type: array
+          items:
+            type: string
+        publishedPorts:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublishedPort'
+        secretRefs:
+          type: array
+          items:
+            type: string
+        configRefs:
+          type: array
+          items:
+            type: string
+        networkRefs:
+          type: array
+          items:
+            type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    Task:
+      type: object
+      required: [id, serviceID, serviceName, nodeID, nodeHostname, desiredState, currentState, exitCode, error, image, restartCount, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        serviceID:
+          type: string
+        serviceName:
+          type: string
+        nodeID:
+          type: string
+        nodeHostname:
+          type: string
+        desiredState:
+          $ref: '#/components/schemas/TaskState'
+        currentState:
+          $ref: '#/components/schemas/TaskState'
+        exitCode:
+          type: integer
+        error:
+          type: string
+        image:
+          type: string
+        restartCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    Network:
+      type: object
+      required: [id, name, driver, scope, subnet, attachable, ingress, serviceCount]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        driver:
+          type: string
+        scope:
+          $ref: '#/components/schemas/NetworkScope'
+        subnet:
+          type: string
+        attachable:
+          type: boolean
+        ingress:
+          type: boolean
+        serviceCount:
+          type: integer
+    Volume:
+      type: object
+      required: [name, driver, scope, mountpoint, labels]
+      properties:
+        name:
+          type: string
+        driver:
+          type: string
+        scope:
+          type: string
+        mountpoint:
+          type: string
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+    Secret:
+      type: object
+      required: [id, name, createdAt, updatedAt, serviceRefs]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        serviceRefs:
+          type: array
+          items:
+            type: string
+    Config:
+      type: object
+      required: [id, name, createdAt, updatedAt, serviceRefs]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        serviceRefs:
+          type: array
+          items:
+            type: string
+    SwarmEvent:
+      type: object
+      required: [type, action, actor, message, timestamp]
+      properties:
+        type:
+          type: string
+        action:
+          type: string
+        actor:
+          type: string
+        message:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
     Finding:
       type: object
       required: [id, severity, resource, scope, message, evidence, recommendation, source, detectedAt]
@@ -1214,6 +1712,120 @@ components:
       properties:
         data:
           $ref: '#/components/schemas/SwarmInfo'
+    NodeItemResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/Node'
+    NodeListResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Node'
+        meta:
+          $ref: '#/components/schemas/ListMeta'
+    StackItemResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/Stack'
+    StackListResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Stack'
+        meta:
+          $ref: '#/components/schemas/ListMeta'
+    ServiceItemResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/Service'
+    ServiceListResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Service'
+        meta:
+          $ref: '#/components/schemas/ListMeta'
+    TaskItemResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/Task'
+    TaskListResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Task'
+        meta:
+          $ref: '#/components/schemas/ListMeta'
+    NetworkListResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Network'
+        meta:
+          $ref: '#/components/schemas/ListMeta'
+    VolumeListResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Volume'
+        meta:
+          $ref: '#/components/schemas/ListMeta'
+    SecretListResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Secret'
+        meta:
+          $ref: '#/components/schemas/ListMeta'
+    ConfigListResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Config'
+        meta:
+          $ref: '#/components/schemas/ListMeta'
+    SwarmEventListResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/SwarmEvent'
+        meta:
+          $ref: '#/components/schemas/ListMeta'
     FindingListResponse:
       type: object
       required: [data, meta]
